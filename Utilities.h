@@ -68,7 +68,7 @@ uint8_t eeprom_read(uint32_t mapped_addr);
 	#elif BOARD_MODEL == BOARD_T3S3
 		#include "hal/wdt_hal.h"
   #else BOARD_MODEL != BOARD_T3S3
-	  #include "soc/rtc_wdt.h"
+	  #include "rtc_wdt.h"
 	#endif
   #define ISR_VECT IRAM_ATTR
 #else
