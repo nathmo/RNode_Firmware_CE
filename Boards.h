@@ -36,12 +36,12 @@
   #define BOARD_LORA32_V1_0   0x39
   #define BOARD_HELTEC32_V2   0x38
   #define BOARD_HELTEC32_V3   0x3A
+  #define BOARD_GENERIC_ESP32_C3 0x3B
   #define BOARD_RNODE_NG_20   0x40
   #define BOARD_RNODE_NG_21   0x41
   #define BOARD_T3S3   0x42
   #define BOARD_GENERIC_NRF52 0x50
   #define BOARD_RAK4631       0x51
-  #define BOARD_GENERIC_ESP32_C3 0x60
 
   // Displays
   #define OLED 0x01
@@ -589,39 +589,6 @@
         #endif
       #endif
 
-    #elif BOARD_MODEL == BOARD_GENERIC_ESP32_C3
-      #define HAS_BLUETOOTH false
-      #define HAS_CONSOLE true
-      #define HAS_EEPROM true
-      #define INTERFACE_COUNT 1
-      const int pin_led_rx = 8;
-      const int pin_led_tx = 9;
-      const uint8_t interfaces[INTERFACE_COUNT] = {SX127X};
-      const bool interface_cfg[INTERFACE_COUNT][3] = { 
-                    // SX127X
-          {
-              true, // DEFAULT_SPI
-              false, // HAS_TCXO
-              false  // DIO2_AS_RF_SWITCH
-          }, 
-      };
-      const int8_t interface_pins[INTERFACE_COUNT][10] = { 
-                  // SX127X
-          {
-              4, // pin_ss
-              -1, // pin_sclk
-              -1, // pin_mosi
-              -1, // pin_miso
-              -1, // pin_busy
-              39, // pin_dio
-              36, // pin_reset
-              -1, // pin_txen
-              -1, // pin_rxen
-              -1  // pin_tcxo_enable
-          }
-      };
-      #endif
-
       #if BOARD_VARIANT == MODEL_A1
       const uint8_t interfaces[INTERFACE_COUNT] = {SX1262};
       const bool interface_cfg[INTERFACE_COUNT][3] = { 
@@ -653,6 +620,37 @@
               34, // pin_busy
               33, // pin_dio
                8, // pin_reset
+              -1, // pin_txen
+              -1, // pin_rxen
+              -1  // pin_tcxo_enable
+          }
+      };
+      #elif BOARD_MODEL == BOARD_GENERIC_ESP32_C3
+      #define HAS_BLUETOOTH false
+      #define HAS_CONSOLE true
+      #define HAS_EEPROM true
+      #define INTERFACE_COUNT 1
+      const int pin_led_rx = 8;
+      const int pin_led_tx = 9;
+      const uint8_t interfaces[INTERFACE_COUNT] = {SX127X};
+      const bool interface_cfg[INTERFACE_COUNT][3] = { 
+                    // SX127X
+          {
+              true, // DEFAULT_SPI
+              false, // HAS_TCXO
+              false  // DIO2_AS_RF_SWITCH
+          }, 
+      };
+      const int8_t interface_pins[INTERFACE_COUNT][10] = { 
+                  // SX127X
+          {
+              4, // pin_ss
+              -1, // pin_sclk
+              -1, // pin_mosi
+              -1, // pin_miso
+              -1, // pin_busy
+              39, // pin_dio
+              36, // pin_reset
               -1, // pin_txen
               -1, // pin_rxen
               -1  // pin_tcxo_enable
