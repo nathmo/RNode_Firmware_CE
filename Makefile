@@ -36,7 +36,6 @@ prep-esp32:
 
 prep-samd:
 	arduino-cli core update-index --config-file arduino-cli.yaml
-	arduino-cli core install adafruit:samd --config-file arduino-cli.yaml
 
 prep-nrf:
 	arduino-cli core update-index --config-file arduino-cli.yaml
