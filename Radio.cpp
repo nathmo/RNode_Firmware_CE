@@ -8,7 +8,7 @@
 
 #if PLATFORM == PLATFORM_ESP32 
   #if defined(ESP32) and !defined(CONFIG_IDF_TARGET_ESP32S3)
-    #include "soc/rtc_wdt.h"
+    #include "rtc_wdt.h"
   #endif
   #define ISR_VECT IRAM_ATTR
 #else
