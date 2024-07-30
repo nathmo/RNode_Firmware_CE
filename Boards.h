@@ -636,7 +636,7 @@
       const bool interface_cfg[INTERFACE_COUNT][3] = { 
                     // SX127X
           {
-              false, // DEFAULT_SPI
+              true, // DEFAULT_SPI
               false, // HAS_TCXO
               false  // DIO2_AS_RF_SWITCH
           }, 
