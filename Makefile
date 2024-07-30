@@ -114,7 +114,7 @@ firmware-featheresp32:
 firmware-genericesp32:
 	arduino-cli compile --fqbn esp32:esp32:esp32 -e --build-property "build.partitions=no_ota" --build-property "upload.maximum_size=2097152" --build-property "compiler.cpp.extra_flags=\"-DBOARD_MODEL=0x35\""
 
-firmware-genericesp32-c3:
+firmware-genericesp32c3:
 	arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc -e --build-property "build.partitions=no_ota" --build-property "upload.maximum_size=2097152" --build-property "compiler.cpp.extra_flags=\"-DBOARD_MODEL=0x3B\""
 
 firmware-rak4631:
@@ -213,7 +213,7 @@ upload-rak4631:
 	unzip -o build/rakwireless.nrf52.WisCoreRAK4631Board/RNode_Firmware_CE.ino.zip -d build/rakwireless.nrf52.WisCoreRAK4631Board
 	rnodeconf /dev/ttyACM0 --firmware-hash $$(sha256sum ./build/rakwireless.nrf52.WisCoreRAK4631Board/RNode_Firmware_CE.ino.bin | grep -o '^\S*')
 
-upload-genericesp32-c3:
+upload-genericesp32c3:
 	arduino-cli upload -p /dev/ttyACM0 --fqbn esp32:esp32:esp32c3
 	@sleep 1
 	rnodeconf /dev/ttyACM0 --firmware-hash $$(./partition_hashes ./build/esp32.esp32.esp32c3/RNode_Firmware_CE.ino.bin)
@@ -222,7 +222,7 @@ upload-genericesp32-c3:
 
 release: release-all
 
-release-all: console-site spiffs-image release-tbeam release-tbeam_sx1262 release-lora32_v10 release-lora32_v20 release-lora32_v21 release-lora32_v10_extled release-lora32_v20_extled release-lora32_v21_extled release-lora32_v21_tcxo release-featheresp32 release-genericesp32 release-heltec32_v2 release-heltec32_v3 release-heltec32_v2_extled release-rnode_ng_20 release-rnode_ng_21 release-t3s3 release-hashes
+release-all: console-site spiffs-image release-tbeam release-tbeam_sx1262 release-lora32_v10 release-lora32_v20 release-lora32_v21 release-lora32_v10_extled release-lora32_v20_extled release-lora32_v21_extled release-lora32_v21_tcxo release-featheresp32 release-genericesp32 release-genericesp32c3 release-heltec32_v2 release-heltec32_v3 release-heltec32_v2_extled release-rnode_ng_20 release-rnode_ng_21 release-t3s3 release-hashes
 
 release-hashes:
 	python ./release_hashes.py > ./Release/release.json
@@ -380,7 +380,7 @@ release-genericesp32:
 	zip --junk-paths ./Release/rnode_firmware_esp32_generic.zip ./Release/esptool/esptool.py ./Release/console_image.bin build/rnode_firmware_esp32_generic.boot_app0 build/rnode_firmware_esp32_generic.bin build/rnode_firmware_esp32_generic.bootloader build/rnode_firmware_esp32_generic.partitions
 	rm -r build
 
-release-genericesp32-c3:
+release-genericesp32c3:
        	arduino-cli compile --fqbn esp32:esp32:esp32c3:CDCOnBoot=cdc -e --build-property "build.partitions=no_ota" --build-property "upload.maximum_size=2097152" --build-property "compiler.cpp.extra_flags=\"-DBOARD_MODEL=0x3B\""
         cp ~/.arduino15/packages/esp32/hardware/esp32/$(ESP_IDF_VER)/tools/partitions/boot_app0.bin build/rnode_firmware_esp32_generic-c3.boot_app0
 	cp build/esp32.esp32.esp32c3/RNode_Firmware_CE.ino.bin build/rnode_firmware_esp32c3_generic.bin
