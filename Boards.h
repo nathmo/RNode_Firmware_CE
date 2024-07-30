@@ -589,6 +589,39 @@
         #endif
       #endif
 
+    #elif BOARD_MODEL == BOARD_GENERIC_ESP32_C3
+      #define HAS_BLUETOOTH false
+      #define HAS_CONSOLE true
+      #define HAS_EEPROM true
+      #define INTERFACE_COUNT 1
+      const int pin_led_rx = 8;
+      const int pin_led_tx = 9;
+      const uint8_t interfaces[INTERFACE_COUNT] = {SX127X};
+      const bool interface_cfg[INTERFACE_COUNT][3] = { 
+                    // SX127X
+          {
+              true, // DEFAULT_SPI
+              false, // HAS_TCXO
+              false  // DIO2_AS_RF_SWITCH
+          }, 
+      };
+      const int8_t interface_pins[INTERFACE_COUNT][10] = { 
+                  // SX127X
+          {
+              4, // pin_ss
+              -1, // pin_sclk
+              -1, // pin_mosi
+              -1, // pin_miso
+              -1, // pin_busy
+              39, // pin_dio
+              36, // pin_reset
+              -1, // pin_txen
+              -1, // pin_rxen
+              -1  // pin_tcxo_enable
+          }
+      };
+      #endif
+
       #if BOARD_VARIANT == MODEL_A1
       const uint8_t interfaces[INTERFACE_COUNT] = {SX1262};
       const bool interface_cfg[INTERFACE_COUNT][3] = { 
@@ -751,38 +784,7 @@
     #else
       #error An unsupported nRF board was selected. Cannot compile RNode firmware.
     #endif
-    #elif BOARD_MODEL == BOARD_GENERIC_ESP32_C3
-      #define HAS_BLUETOOTH false
-      #define HAS_CONSOLE true
-      #define HAS_EEPROM true
-      #define INTERFACE_COUNT 1
-      const int pin_led_rx = 8;
-      const int pin_led_tx = 9;
-      const uint8_t interfaces[INTERFACE_COUNT] = {SX127X};
-      const bool interface_cfg[INTERFACE_COUNT][3] = { 
-                    // SX127X
-          {
-              true, // DEFAULT_SPI
-              false, // HAS_TCXO
-              false  // DIO2_AS_RF_SWITCH
-          }, 
-      };
-      const int8_t interface_pins[INTERFACE_COUNT][10] = { 
-                  // SX127X
-          {
-              4, // pin_ss
-              -1, // pin_sclk
-              -1, // pin_mosi
-              -1, // pin_miso
-              -1, // pin_busy
-              39, // pin_dio
-              36, // pin_reset
-              -1, // pin_txen
-              -1, // pin_rxen
-              -1  // pin_tcxo_enable
-          }
-      };
-    #endif
+
   #endif
   #ifndef INTERFACE_SPI
     // INTERFACE_SPI is only required on NRF52 platforms, as the SPI pins are set in the class constructor and not by a setter method.
