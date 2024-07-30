@@ -636,7 +636,7 @@
       const bool interface_cfg[INTERFACE_COUNT][3] = { 
                     // SX127X
           {
-              true, // DEFAULT_SPI
+              false, // DEFAULT_SPI
               false, // HAS_TCXO
               false  // DIO2_AS_RF_SWITCH
           }, 
@@ -644,13 +644,13 @@
       const int8_t interface_pins[INTERFACE_COUNT][10] = { 
                   // SX127X
           {
-              4, // pin_ss
-              -1, // pin_sclk
-              -1, // pin_mosi
-              -1, // pin_miso
+              7, // pin_ss
+              4, // pin_sclk
+              6, // pin_mosi
+              5, // pin_miso
               -1, // pin_busy
-              39, // pin_dio
-              36, // pin_reset
+              2, // pin_dio
+              3, // pin_reset
               -1, // pin_txen
               -1, // pin_rxen
               -1  // pin_tcxo_enable
