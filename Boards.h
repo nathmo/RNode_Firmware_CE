@@ -630,8 +630,8 @@
       #define HAS_CONSOLE true
       #define HAS_EEPROM true
       #define INTERFACE_COUNT 1
-      const int pin_led_rx = 8;
-      const int pin_led_tx = 9;
+      const int pin_led_rx = 9;
+      const int pin_led_tx = 8;
       const uint8_t interfaces[INTERFACE_COUNT] = {SX127X};
       const bool interface_cfg[INTERFACE_COUNT][3] = { 
                     // SX127X
