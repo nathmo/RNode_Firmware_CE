@@ -94,16 +94,19 @@ void setup() {
   // is disabled on this platform.
     while (!Serial);
   #endif
+    Serial.write("A\r\n");
 
   // Configure input and output pins
   #if HAS_INPUT
     input_init();
   #endif
 
+    Serial.write("B\r\n");
   #if HAS_NP == false
     pinMode(pin_led_rx, OUTPUT);
     pinMode(pin_led_tx, OUTPUT);
   #endif
+    Serial.write("C\r\n");
 
   for (int i = 0; i < INTERFACE_COUNT; i++) {
     if (interface_pins[i][9] != -1) {
@@ -111,23 +114,24 @@ void setup() {
         digitalWrite(interface_pins[i][9], HIGH);
     }
   }
-
+    Serial.write("D\r\n");
   // Initialise buffers
   memset(pbuf, 0, sizeof(pbuf));
   memset(cmdbuf, 0, sizeof(cmdbuf));
-  
+    Serial.write("E\r\n");
   memset(packet_starts_buf, 0, sizeof(packet_starts_buf));
   memset(packet_lengths_buf, 0, sizeof(packet_starts_buf));
-
+    Serial.write("F\r\n");
   for (int i = 0; i < INTERFACE_COUNT; i++) {
       fifo16_init(&packet_starts[i], packet_starts_buf, CONFIG_QUEUE_MAX_LENGTH);
       fifo16_init(&packet_lengths[i], packet_lengths_buf, CONFIG_QUEUE_MAX_LENGTH);
       packet_queue[i] = (uint8_t*)malloc(getQueueSize(i));
   }
-
+    Serial.write("G\r\n");
   // Create and configure interface objects
   for (uint8_t i = 0; i < INTERFACE_COUNT; i++) {
       switch (interfaces[i]) {
+                  Serial.write("H\r\n");
           case SX126X:
           case SX1262:
           {
@@ -154,6 +158,7 @@ void setup() {
           case SX1276:
           case SX1278:
           {
+            Serial.write("I\r\n");
               sx127x* obj;
               // if default spi enabled
               if (interface_cfg[i][0]) {
@@ -174,6 +179,7 @@ void setup() {
           case SX128X:
           case SX1280:
           {
+            Serial.write("J\r\n");
               sx128x* obj;
               // if default spi enabled
               if (interface_cfg[i][0]) {
@@ -197,7 +203,7 @@ void setup() {
             break;
       }
   }
-
+Serial.write("K\r\n");
     // Check installed transceiver chip(s) and probe boot parameters. If any of
     // the configured modems cannot be initialised, do not boot
     for (int i = 0; i < INTERFACE_COUNT; i++) {
@@ -216,6 +222,7 @@ void setup() {
                 modems_installed = false;
                 break;
         }
+      Serial.write("L\r\n");
         if (selected_radio->preInit()) {
           modems_installed = true;
           uint32_t lfr = selected_radio->getFrequency();
@@ -239,6 +246,7 @@ void setup() {
             break;
         }
     }
+Serial.write("M\r\n");
 
   #if HAS_DISPLAY
     #if HAS_EEPROM
@@ -257,16 +265,16 @@ void setup() {
     disp_ready = display_init();
     update_display();
   #endif
-
+Serial.write("N\r\n");
     #if HAS_PMU == true
       pmu_ready = init_pmu();
     #endif
-
+Serial.write("O\r\n");
     #if HAS_BLUETOOTH || HAS_BLE == true
       bt_init();
       bt_init_ran = true;
     #endif
-
+Serial.write("P\r\n");
     if (console_active) {
       #if HAS_CONSOLE
         console_start();
@@ -276,7 +284,7 @@ void setup() {
     } else {
       kiss_indicate_reset();
     }
-
+Serial.write("Q\r\n");
   // Validate board health, EEPROM and config
   Serial.write("config done, validating\r\n");    
   validate_status();
