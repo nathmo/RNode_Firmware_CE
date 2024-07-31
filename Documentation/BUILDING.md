@@ -1,7 +1,6 @@
 # Building
 ## Prerequisites
-The build system of this repository is based on Make. The `Makefile` is in the base of the repository. Please ensure you have `arduino-cli` installed before proceeding.
-
+The build system of this repository is based on Make. The `Makefile` is in the base of the repository. the makefile use the arduino-cli to compile the sketch.
 Firstly, figure out which MCU platform your supported board is based on. The table below can help you.
 
 | Board name | Link | Transceiver | MCU | Description | 
@@ -16,11 +15,56 @@ Firstly, figure out which MCU platform your supported board is based on. The tab
 | Heltec LoRa32 v3 | [Buy here](https://heltec.org/project/wifi-lora-32-v3/) | SX1262 | ESP32 | 
 | Homebrew ESP32 boards | | Any supported | ESP32 | This can be any board with an Adafruit Feather (or generic) ESP32 chip |
 
-### ESP32
-If your board is ESP32-based, please run `make prep-esp32` to install the required BSP and libraries for that target.
+## Setup
+on linux you can do the following to either compile for an existing board or as a starting point to create your own.
+```
+sudo apt update
+sudo apt install git python3 python3-pip make
+curl -fsSL https://raw.githubusercontent.com/arduino/arduino-cli/master/install.sh | sh
+```
+once you have the required dependency you can add the arduino-cli to the path so that the shell knows its a command
+```
+nano ~/.bashrc
+```
+and add this line at the end (change your used if it's not ubuntu) and check that the path correspond to what the arduino-cli install script returned.
+```
+export PATH=$PATH:/home/ubuntu/.local/bin
+```
+save and exit then reboot
+```
+sudo reboot now
+```
+then you can clone this repo in a location and your choice
+```
+git clone https://github.com/liberatedsystems/RNode_Firmware_CE.git
+cd RNode_Firmware_CE
+```
+now we create a virtual environnement that MUST be reactivated whenver you resume working with this project
+to create it : 
+```
+python -m venv venv
+```
+just run the following command to reactivate it every time
+```
+source venv/bin/activate
+```
+and this to deactivate it once you are done (not now)
+```
+deactivate # DO NOT RUN ME NOW. ONLY WHEN YOU ARE DONE.
+```
 
-### nRF52
-If your board is nRF52-based, please run `make prep-nrf` to install the required BSP and libraries for that target.
+now you can install the required python utilities
+```
+pip install pyserial rns
+```
+and install the required dependency to build :
+```
+make prep
+```
+alternatively you can run `make prep-esp32` or` make prep-nrf` if you know what platform you are building from to save up some time.
+
+you are now ready to compile the firmware.
+
 
 ## Compiling
 Next, you need to find the name of the target for your board. Please reference the table below to do so:
