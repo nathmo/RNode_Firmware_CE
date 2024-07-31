@@ -17,27 +17,21 @@
 #include <SPI.h>
 #include "Utilities.h"
 
-#if BOARD_MODEL == BOARD_HELTEC32_V3
-// Default stack size for loop function on Heltec32 V3 is not large enough,
-// must be increased to 11kb to prevent crashes.
-SET_LOOP_TASK_STACK_SIZE(11 * 1024);  // 11KB
-#endif
-
 FIFOBuffer serialFIFO;
 uint8_t serialBuffer[CONFIG_UART_BUFFER_SIZE+1];
 
-uint16_t packet_starts_buf[(CONFIG_QUEUE_MAX_LENGTH)+1];
+FIFOBuffer16 packet_starts;
+uint16_t packet_starts_buf[CONFIG_QUEUE_MAX_LENGTH+1];
 
-uint16_t packet_lengths_buf[(CONFIG_QUEUE_MAX_LENGTH)+1];
+FIFOBuffer16 packet_lengths;
+uint16_t packet_lengths_buf[CONFIG_QUEUE_MAX_LENGTH+1];
 
-FIFOBuffer16 packet_starts[INTERFACE_COUNT];
-FIFOBuffer16 packet_lengths[INTERFACE_COUNT];
+uint8_t packet_queue[CONFIG_QUEUE_SIZE];
 
-volatile uint8_t queue_height[INTERFACE_COUNT] = {0};
-volatile uint16_t queued_bytes[INTERFACE_COUNT] = {0};
-
-volatile uint16_t queue_cursor[INTERFACE_COUNT] = {0};
-volatile uint16_t current_packet_start[INTERFACE_COUNT] = {0};
+volatile uint8_t queue_height = 0;
+volatile uint16_t queued_bytes = 0;
+volatile uint16_t queue_cursor = 0;
+volatile uint16_t current_packet_start = 0;
 volatile bool serial_buffering = false;
 #if HAS_BLUETOOTH || HAS_BLE == true
   bool bt_init_ran = false;
@@ -49,12 +43,9 @@ volatile bool serial_buffering = false;
 
 char sbuf[128];
 
-bool packet_ready = false;
-
-volatile bool process_packet = false;
-volatile uint8_t packet_interface = 0;
-
-uint8_t *packet_queue[INTERFACE_COUNT];
+#if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+  bool packet_ready = false;
+#endif
 
 void setup() {
   #if MCU_VARIANT == MCU_ESP32
@@ -87,13 +78,15 @@ void setup() {
 
   Serial.begin(serial_baudrate);
 
-  #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
+  #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_RNODE_NG_22
   // Some boards need to wait until the hardware UART is set up before booting
   // the full firmware. In the case of the RAK4631, the line below will wait
   // until a serial connection is actually established with a master. Thus, it
   // is disabled on this platform.
     while (!Serial);
   #endif
+
+  serial_interrupt_init();
 
   // Configure input and output pins
   #if HAS_INPUT
@@ -105,140 +98,64 @@ void setup() {
     pinMode(pin_led_tx, OUTPUT);
   #endif
 
-  for (int i = 0; i < INTERFACE_COUNT; i++) {
-    if (interface_pins[i][9] != -1) {
-        pinMode(interface_pins[i][9], OUTPUT);
-        digitalWrite(interface_pins[i][9], HIGH);
+  #if HAS_TCXO == true
+    if (pin_tcxo_enable != -1) {
+        pinMode(pin_tcxo_enable, OUTPUT);
+        digitalWrite(pin_tcxo_enable, HIGH);
     }
-  }
+  #endif
 
   // Initialise buffers
   memset(pbuf, 0, sizeof(pbuf));
   memset(cmdbuf, 0, sizeof(cmdbuf));
   
+  memset(packet_queue, 0, sizeof(packet_queue));
+
   memset(packet_starts_buf, 0, sizeof(packet_starts_buf));
+  fifo16_init(&packet_starts, packet_starts_buf, CONFIG_QUEUE_MAX_LENGTH);
+  
   memset(packet_lengths_buf, 0, sizeof(packet_starts_buf));
+  fifo16_init(&packet_lengths, packet_lengths_buf, CONFIG_QUEUE_MAX_LENGTH);
 
-  for (int i = 0; i < INTERFACE_COUNT; i++) {
-      fifo16_init(&packet_starts[i], packet_starts_buf, CONFIG_QUEUE_MAX_LENGTH);
-      fifo16_init(&packet_lengths[i], packet_lengths_buf, CONFIG_QUEUE_MAX_LENGTH);
-      packet_queue[i] = (uint8_t*)malloc(getQueueSize(i));
-  }
+  // Set chip select, reset and interrupt
+  // pins for the LoRa module
+  #if MODEM == SX1276 || MODEM == SX1278
+  LoRa->setPins(pin_cs, pin_reset, pin_dio, pin_busy);
+  #elif MODEM == SX1262
+  LoRa->setPins(pin_cs, pin_reset, pin_dio, pin_busy, pin_rxen);
+  #elif MODEM == SX1280
+  LoRa->setPins(pin_cs, pin_reset, pin_dio, pin_busy, pin_rxen, pin_txen);
+  #endif
+  
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+    init_channel_stats();
 
-  // Create and configure interface objects
-  for (uint8_t i = 0; i < INTERFACE_COUNT; i++) {
-      switch (interfaces[i]) {
-          case SX126X:
-          case SX1262:
-          {
-              sx126x* obj;
-              // if default spi enabled
-              if (interface_cfg[i][0]) {
-                obj = new sx126x(i, SPI, interface_cfg[i][1],
-                interface_cfg[i][2], interface_pins[i][0], interface_pins[i][1],
-                interface_pins[i][2], interface_pins[i][3], interface_pins[i][6],
-                interface_pins[i][5], interface_pins[i][4], interface_pins[i][8]);
-              }
-              else {
-            obj = new sx126x(i, interface_spi[i], interface_cfg[i][1],
-            interface_cfg[i][2], interface_pins[i][0], interface_pins[i][1],
-            interface_pins[i][2], interface_pins[i][3], interface_pins[i][6],
-            interface_pins[i][5], interface_pins[i][4], interface_pins[i][8]);
-              }
-            interface_obj[i] = obj;
-            interface_obj_sorted[i] = obj;
-            break;
+    // Check installed transceiver chip and
+    // probe boot parameters.
+    if (LoRa->preInit()) {
+      modem_installed = true;
+      uint32_t lfr = LoRa->getFrequency();
+      if (lfr == 0) {
+        // Normal boot
+      } else if (lfr == M_FRQ_R) {
+        // Quick reboot
+        #if HAS_CONSOLE
+          if (rtc_get_reset_reason(0) == POWERON_RESET) {
+            console_active = true;
           }
-
-          case SX127X:
-          case SX1276:
-          case SX1278:
-          {
-              sx127x* obj;
-              // if default spi enabled
-              if (interface_cfg[i][0]) {
-            obj = new sx127x(i, SPI, interface_pins[i][0],
-            interface_pins[i][1], interface_pins[i][2], interface_pins[i][3],
-            interface_pins[i][6], interface_pins[i][5], interface_pins[i][4]);
-              }
-              else {
-            obj = new sx127x(i, interface_spi[i], interface_pins[i][0],
-            interface_pins[i][1], interface_pins[i][2], interface_pins[i][3],
-            interface_pins[i][6], interface_pins[i][5], interface_pins[i][4]);
-              }
-            interface_obj[i] = obj;
-            interface_obj_sorted[i] = obj;
-            break;
-          }
-
-          case SX128X:
-          case SX1280:
-          {
-              sx128x* obj;
-              // if default spi enabled
-              if (interface_cfg[i][0]) {
-            obj = new sx128x(i, SPI, interface_cfg[i][1],
-            interface_pins[i][0], interface_pins[i][1], interface_pins[i][2],
-            interface_pins[i][3], interface_pins[i][6], interface_pins[i][5],
-            interface_pins[i][4], interface_pins[i][8], interface_pins[i][7]);
-            }
-            else {
-            obj = new sx128x(i, interface_spi[i], interface_cfg[i][1],
-            interface_pins[i][0], interface_pins[i][1], interface_pins[i][2],
-            interface_pins[i][3], interface_pins[i][6], interface_pins[i][5],
-            interface_pins[i][4], interface_pins[i][8], interface_pins[i][7]);
-            }
-            interface_obj[i] = obj;
-            interface_obj_sorted[i] = obj;
-            break;
-          }
-          
-          default:
-            break;
+        #endif
+      } else {
+        // Unknown boot
       }
-  }
-
-    // Check installed transceiver chip(s) and probe boot parameters. If any of
-    // the configured modems cannot be initialised, do not boot
-    for (int i = 0; i < INTERFACE_COUNT; i++) {
-        switch (interfaces[i]) {
-            case SX126X:
-            case SX1262:
-            case SX127X:
-            case SX1276:
-            case SX1278:
-            case SX128X:
-            case SX1280:
-                selected_radio = interface_obj[i];
-                break;
-
-            default:
-                modems_installed = false;
-                break;
-        }
-        if (selected_radio->preInit()) {
-          modems_installed = true;
-          uint32_t lfr = selected_radio->getFrequency();
-          if (lfr == 0) {
-            // Normal boot
-          } else if (lfr == M_FRQ_R) {
-            // Quick reboot
-            #if HAS_CONSOLE
-              if (rtc_get_reset_reason(0) == POWERON_RESET) {
-                console_active = true;
-              }
-            #endif
-          } else {
-            // Unknown boot
-          }
-          selected_radio->setFrequency(M_FRQ_S);
-        } else {
-          modems_installed = false;
-        }
-        if (!modems_installed) {
-            break;
-        }
+      LoRa->setFrequency(M_FRQ_S);
+    } else {
+      modem_installed = false;
     }
+  #else
+    // Older variants only came with SX1276/78 chips,
+    // so assume that to be the case for now.
+    modem_installed = true;
+  #endif
 
   #if HAS_DISPLAY
     #if HAS_EEPROM
@@ -249,15 +166,11 @@ void setup() {
       eeprom_update(eeprom_addr(ADDR_CONF_DSET), CONF_OK_BYTE);
       eeprom_update(eeprom_addr(ADDR_CONF_DINT), 0xFF);
     }
-    #if DISPLAY == EINK_BW || DISPLAY == EINK_3C
-    // Poll and process incoming serial commands whilst e-ink display is
-    // refreshing to make device still seem responsive
-    display_add_callback(process_serial);
-    #endif
     disp_ready = display_init();
     update_display();
   #endif
 
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
     #if HAS_PMU == true
       pmu_ready = init_pmu();
     #endif
@@ -276,28 +189,25 @@ void setup() {
     } else {
       kiss_indicate_reset();
     }
+  #endif
 
   // Validate board health, EEPROM and config
   validate_status();
+
+  if (op_mode != MODE_TNC) LoRa->setFrequency(0);
 }
 
-void lora_receive(RadioInterface* radio) {
+void lora_receive() {
   if (!implicit) {
-    radio->receive();
+    LoRa->receive();
   } else {
-    radio->receive(implicit_l);
+    LoRa->receive(implicit_l);
   }
 }
 
-inline void kiss_write_packet(int index) {
-  // We need to convert the interface index to the command byte representation
-  uint8_t cmd_byte = getInterfaceCommandByte(index);
-
+inline void kiss_write_packet() {
   serial_write(FEND);
-
-  // Add index of interface the packet came from
-  serial_write(cmd_byte);
-
+  serial_write(CMD_DATA);
   for (uint16_t i = 0; i < read_len; i++) {
     uint8_t byte = pbuf[i];
     if (byte == FEND) { serial_write(FESC); byte = TFEND; }
@@ -306,25 +216,25 @@ inline void kiss_write_packet(int index) {
   }
   serial_write(FEND);
   read_len = 0;
-  packet_ready = false;
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+    packet_ready = false;
+  #endif
 }
 
-inline void getPacketData(RadioInterface* radio, uint16_t len) {
+inline void getPacketData(uint16_t len) {
   while (len-- && read_len < MTU) {
-    pbuf[read_len++] = radio->read();
+    pbuf[read_len++] = LoRa->read();
   }
 }
 
-void ISR_VECT receive_callback(uint8_t index, int packet_size) {
+void ISR_VECT receive_callback(int packet_size) {
   if (!promisc) {
-    selected_radio = interface_obj[index];
-
     // The standard operating mode allows large
     // packets with a payload up to 500 bytes,
     // by combining two raw LoRa packets.
     // We read the 1-byte header and extract
     // packet sequence number and split flags
-    uint8_t header   = selected_radio->read(); packet_size--;
+    uint8_t header   = LoRa->read(); packet_size--;
     uint8_t sequence = packetSequence(header);
     bool    ready    = false;
 
@@ -335,14 +245,25 @@ void ISR_VECT receive_callback(uint8_t index, int packet_size) {
       read_len = 0;
       seq = sequence;
 
-      getPacketData(selected_radio, packet_size);
+      #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+        last_rssi = LoRa->packetRssi();
+        last_snr_raw = LoRa->packetSnrRaw();
+      #endif
+
+      getPacketData(packet_size);
 
     } else if (isSplitPacket(header) && seq == sequence) {
       // This is the second part of a split
       // packet, so we add it to the buffer
       // and set the ready flag.
       
-      getPacketData(selected_radio, packet_size);
+
+      #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+        last_rssi = (last_rssi+LoRa->packetRssi())/2;
+        last_snr_raw = (last_snr_raw+LoRa->packetSnrRaw())/2;
+      #endif
+
+      getPacketData(packet_size);
 
       seq = SEQ_UNSET;
       ready = true;
@@ -355,7 +276,12 @@ void ISR_VECT receive_callback(uint8_t index, int packet_size) {
       read_len = 0;
       seq = sequence;
 
-      getPacketData(selected_radio, packet_size);
+      #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+        last_rssi = LoRa->packetRssi();
+        last_snr_raw = LoRa->packetSnrRaw();
+      #endif
+
+      getPacketData(packet_size);
 
     } else if (!isSplitPacket(header)) {
       // This is not a split packet, so we
@@ -369,50 +295,85 @@ void ISR_VECT receive_callback(uint8_t index, int packet_size) {
         seq = SEQ_UNSET;
       }
 
-      getPacketData(selected_radio, packet_size);
+      #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+        last_rssi = LoRa->packetRssi();
+        last_snr_raw = LoRa->packetSnrRaw();
+      #endif
+
+      getPacketData(packet_size);
       ready = true;
     }
 
     if (ready) {
+      #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+        // We first signal the RSSI of the
+        // recieved packet to the host.
+        kiss_indicate_stat_rssi();
+        kiss_indicate_stat_snr();
+
+        // And then write the entire packet
+        kiss_write_packet();
+      #else
         packet_ready = true;
+      #endif
     }  
   } else {
     // In promiscuous mode, raw packets are
     // output directly to the host
     read_len = 0;
 
-    getPacketData(selected_radio, packet_size);
-    packet_ready = true;
+    #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+      last_rssi = LoRa->packetRssi();
+      last_snr_raw = LoRa->packetSnrRaw();
+      getPacketData(packet_size);
+
+      // We first signal the RSSI of the
+      // recieved packet to the host.
+      kiss_indicate_stat_rssi();
+      kiss_indicate_stat_snr();
+
+      // And then write the entire packet
+      kiss_write_packet();
+
+    #else
+      getPacketData(packet_size);
+      packet_ready = true;
+    #endif
   }
-  last_rx = millis();
 }
 
-bool startRadio(RadioInterface* radio) {
-  update_radio_lock(radio);
-  
-  if (modems_installed && !console_active) {
-    if (!radio->getRadioLock() && hw_ready) {
-      if (!radio->begin()) {
+bool startRadio() {
+  update_radio_lock();
+  if (!radio_online && !console_active) {
+    if (!radio_locked && hw_ready) {
+      if (!LoRa->begin(lora_freq)) {
         // The radio could not be started.
         // Indicate this failure over both the
         // serial port and with the onboard LEDs
+        radio_error = true;
         kiss_indicate_error(ERROR_INITRADIO);
         led_indicate_error(0);
         return false;
       } else {
-        radio->enableCrc();
+        radio_online = true;
 
-        radio->onReceive(receive_callback);
+        init_channel_stats();
 
-        radio->updateBitrate();
-        sort_interfaces();
-        kiss_indicate_phy_stats(radio);
+        setTXPower();
+        setBandwidth();
+        setSpreadingFactor();
+        setCodingRate();
+        getFrequency();
 
-        lora_receive(radio);
+        LoRa->enableCrc();
+
+        LoRa->onReceive(receive_callback);
+
+        lora_receive();
 
         // Flash an info pattern to indicate
         // that the radio is now on
-        kiss_indicate_radiostate(radio);
+        kiss_indicate_radiostate();
         led_indicate_info(3);
         return true;
       }
@@ -421,77 +382,121 @@ bool startRadio(RadioInterface* radio) {
       // Flash a warning pattern to indicate
       // that the radio was locked, and thus
       // not started
-      kiss_indicate_radiostate(radio);
+      radio_online = false;
+      kiss_indicate_radiostate();
       led_indicate_warning(3);
       return false;
     }
   } else {
     // If radio is already on, we silently
     // ignore the request.
-    kiss_indicate_radiostate(radio);
+    kiss_indicate_radiostate();
     return true;
   }
 }
 
-void stopRadio(RadioInterface* radio) {
-  radio->end();
-  sort_interfaces();
+void stopRadio() {
+  LoRa->end();
+  radio_online = false;
 }
 
-void update_radio_lock(RadioInterface* radio) {
-  if (radio->getFrequency() != 0 && radio->getSignalBandwidth() != 0 && radio->getTxPower() != 0xFF && radio->getSpreadingFactor() != 0) {
-    radio->setRadioLock(false);
+void update_radio_lock() {
+  if (lora_freq != 0 && lora_bw != 0 && lora_txp != 0xFF && lora_sf != 0) {
+    radio_locked = false;
   } else {
-    radio->setRadioLock(true);
+    radio_locked = true;
   }
 }
 
-// Check if the queue is full for the selected radio.
-// Returns true if full, false if not
-bool queueFull(RadioInterface* radio) {
-  return (queue_height[radio->getIndex()] >= (CONFIG_QUEUE_MAX_LENGTH) || queued_bytes[radio->getIndex()] >= (getQueueSize(radio->getIndex())));
+bool queueFull() {
+  return (queue_height >= CONFIG_QUEUE_MAX_LENGTH || queued_bytes >= CONFIG_QUEUE_SIZE);
 }
 
 volatile bool queue_flushing = false;
-
-// Flushes all packets for the interface
-void flushQueue(RadioInterface* radio) {
-    uint8_t index = radio->getIndex();
+void flushQueue(void) {
   if (!queue_flushing) {
     queue_flushing = true;
 
     led_tx_on();
     uint16_t processed = 0;
-    uint8_t data_byte;
 
-    while (!fifo16_isempty(&packet_starts[index])) {
-      uint16_t start = fifo16_pop(&packet_starts[index]);
-      uint16_t length = fifo16_pop(&packet_lengths[index]);
+    #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+    while (!fifo16_isempty(&packet_starts)) {
+    #else
+    while (!fifo16_isempty_locked(&packet_starts)) {
+    #endif
+
+      uint16_t start = fifo16_pop(&packet_starts);
+      uint16_t length = fifo16_pop(&packet_lengths);
 
       if (length >= MIN_L && length <= MTU) {
         for (uint16_t i = 0; i < length; i++) {
-          uint16_t pos = (start+i)%(getQueueSize(index));
-          tbuf[i] = packet_queue[index][pos];
+          uint16_t pos = (start+i)%CONFIG_QUEUE_SIZE;
+          tbuf[i] = packet_queue[pos];
         }
-        transmit(radio, length);
+
+        transmit(length);
         processed++;
       }
     }
 
-    lora_receive(radio);
+    lora_receive();
     led_tx_off();
-
-    radio->setPostTxYieldTimeout(millis()+(lora_post_tx_yield_slots*selected_radio->getCSMASlotMS()));
+    post_tx_yield_timeout = millis()+(lora_post_tx_yield_slots*csma_slot_ms);
   }
 
-  queue_height[index] = 0;
-  queued_bytes[index] = 0;
-  selected_radio->updateAirtime();
+  queue_height = 0;
+  queued_bytes = 0;
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+    update_airtime();
+  #endif
   queue_flushing = false;
 }
 
-void transmit(RadioInterface* radio, uint16_t size) {
-  if (radio->getRadioOnline()) { 
+#define PHY_HEADER_LORA_SYMBOLS 8
+void add_airtime(uint16_t written) {
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+    float packet_cost_ms = 0.0;
+    float payload_cost_ms = ((float)written * lora_us_per_byte)/1000.0;
+    packet_cost_ms += payload_cost_ms;
+    packet_cost_ms += (lora_preamble_symbols+4.25)*lora_symbol_time_ms;
+    packet_cost_ms += PHY_HEADER_LORA_SYMBOLS * lora_symbol_time_ms;
+    uint16_t cb = current_airtime_bin();
+    uint16_t nb = cb+1; if (nb == AIRTIME_BINS) { nb = 0; }
+    airtime_bins[cb] += packet_cost_ms;
+    airtime_bins[nb] = 0;
+  #endif
+}
+
+void update_airtime() {
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+    uint16_t cb = current_airtime_bin();
+    uint16_t pb = cb-1; if (cb-1 < 0) { pb = AIRTIME_BINS-1; }
+    uint16_t nb = cb+1; if (nb == AIRTIME_BINS) { nb = 0; }
+    airtime_bins[nb] = 0;
+    airtime = (float)(airtime_bins[cb]+airtime_bins[pb])/(2.0*AIRTIME_BINLEN_MS);
+
+    uint32_t longterm_airtime_sum = 0;
+    for (uint16_t bin = 0; bin < AIRTIME_BINS; bin++) {
+      longterm_airtime_sum += airtime_bins[bin];
+    }
+    longterm_airtime = (float)longterm_airtime_sum/(float)AIRTIME_LONGTERM_MS;
+
+    float longterm_channel_util_sum = 0.0;
+    for (uint16_t bin = 0; bin < AIRTIME_BINS; bin++) {
+      longterm_channel_util_sum += longterm_bins[bin];
+    }
+    longterm_channel_util = (float)longterm_channel_util_sum/(float)AIRTIME_BINS;
+
+    #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+      update_csma_p();
+    #endif
+    kiss_indicate_channel_stats();
+  #endif
+}
+
+void transmit(uint16_t size) {
+  if (radio_online) {
     if (!promisc) {
       uint16_t  written = 0;
       uint8_t header  = random(256) & 0xF0;
@@ -500,24 +505,23 @@ void transmit(RadioInterface* radio, uint16_t size) {
         header = header | FLAG_SPLIT;
       }
 
-
-      radio->beginPacket();
-      radio->write(header); written++;
+      LoRa->beginPacket();
+      LoRa->write(header); written++;
 
       for (uint16_t i=0; i < size; i++) {
-        radio->write(tbuf[i]);
+        LoRa->write(tbuf[i]);
 
         written++;
 
         if (written == 255) {
-          radio->endPacket(); radio->addAirtime(written);
-          radio->beginPacket();
-          radio->write(header);
+          LoRa->endPacket(); add_airtime(written);
+          LoRa->beginPacket();
+          LoRa->write(header);
           written = 1;
         }
       }
 
-      radio->endPacket(); radio->addAirtime(written);
+      LoRa->endPacket(); add_airtime(written);
     } else {
       // In promiscuous mode, we only send out
       // plain raw LoRa packets with a maximum
@@ -533,19 +537,18 @@ void transmit(RadioInterface* radio, uint16_t size) {
       // If implicit header mode has been set,
       // set packet length to payload data length
       if (!implicit) {
-        radio->beginPacket();
+        LoRa->beginPacket();
       } else {
-        radio->beginPacket(size);
+        LoRa->beginPacket(size);
       }
 
       for (uint16_t i=0; i < size; i++) {
-        radio->write(tbuf[i]);
+        LoRa->write(tbuf[i]);
 
         written++;
       }
-      radio->endPacket(); radio->addAirtime(written);
+      LoRa->endPacket(); add_airtime(written);
     }
-    last_tx = millis();
   } else {
     kiss_indicate_error(ERROR_TXFAILED);
     led_indicate_error(5);
@@ -553,43 +556,29 @@ void transmit(RadioInterface* radio, uint16_t size) {
 }
 
 void serialCallback(uint8_t sbyte) {
-  if (IN_FRAME && sbyte == FEND && 
-            (command == CMD_INT0_DATA
-          || command == CMD_INT1_DATA
-          || command == CMD_INT2_DATA
-          || command == CMD_INT3_DATA
-          || command == CMD_INT4_DATA
-          || command == CMD_INT5_DATA
-          || command == CMD_INT6_DATA
-          || command == CMD_INT7_DATA
-          || command == CMD_INT8_DATA
-          || command == CMD_INT9_DATA
-          || command == CMD_INT10_DATA 
-          || command == CMD_INT11_DATA)) {
+  if (IN_FRAME && sbyte == FEND && command == CMD_DATA) {
     IN_FRAME = false;
 
-    if (getInterfaceIndex(command) < INTERFACE_COUNT) {
-            uint8_t index = getInterfaceIndex(command);
-        if (!fifo16_isfull(&packet_starts[index]) && queued_bytes[index] < (getQueueSize(index))) {
-            uint16_t s = current_packet_start[index];
-            int16_t e = queue_cursor[index]-1; if (e == -1) e = (getQueueSize(index))-1;
-            uint16_t l;
+    if (!fifo16_isfull(&packet_starts) && queued_bytes < CONFIG_QUEUE_SIZE) {
+        uint16_t s = current_packet_start;
+        int16_t e = queue_cursor-1; if (e == -1) e = CONFIG_QUEUE_SIZE-1;
+        uint16_t l;
 
-            if (s != e) {
-                l = (s < e) ? e - s + 1: (getQueueSize(index)) - s + e + 1;
-            } else {
-                l = 1;
-            }
-
-            if (l >= MIN_L) {
-                queue_height[index]++;
-
-                fifo16_push(&packet_starts[index], s);
-                fifo16_push(&packet_lengths[index], l);
-                current_packet_start[index] = queue_cursor[index];
-            }
-
+        if (s != e) {
+            l = (s < e) ? e - s + 1 : CONFIG_QUEUE_SIZE - s + e + 1;
+        } else {
+            l = 1;
         }
+
+        if (l >= MIN_L) {
+            queue_height++;
+
+            fifo16_push(&packet_starts, s);
+            fifo16_push(&packet_lengths, l);
+
+            current_packet_start = queue_cursor;
+        }
+
     }
 
   } else if (sbyte == FEND) {
@@ -600,33 +589,7 @@ void serialCallback(uint8_t sbyte) {
     // Have a look at the command byte first
     if (frame_len == 0 && command == CMD_UNKNOWN) {
         command = sbyte;
-        if  (command == CMD_SEL_INT0 
-                 || command == CMD_SEL_INT1 
-                 || command == CMD_SEL_INT2 
-                 || command == CMD_SEL_INT3 
-                 || command == CMD_SEL_INT4 
-                 || command == CMD_SEL_INT5 
-                 || command == CMD_SEL_INT6 
-                 || command == CMD_SEL_INT7 
-                 || command == CMD_SEL_INT8 
-                 || command == CMD_SEL_INT9 
-                 || command == CMD_SEL_INT10 
-                 || command == CMD_SEL_INT11) {
-            interface = getInterfaceIndex(command);
-        }
-
-    } else if  (command == CMD_INT0_DATA 
-             || command == CMD_INT1_DATA 
-             || command == CMD_INT2_DATA 
-             || command == CMD_INT3_DATA 
-             || command == CMD_INT4_DATA 
-             || command == CMD_INT5_DATA 
-             || command == CMD_INT6_DATA 
-             || command == CMD_INT7_DATA 
-             || command == CMD_INT8_DATA 
-             || command == CMD_INT9_DATA 
-             || command == CMD_INT10_DATA 
-             || command == CMD_INT11_DATA) {
+    } else if (command == CMD_DATA) {
         if (bt_state != BT_STATE_CONNECTED) cable_state = CABLE_STATE_CONNECTED;
         if (sbyte == FESC) {
             ESCAPE = true;
@@ -636,19 +599,11 @@ void serialCallback(uint8_t sbyte) {
                 if (sbyte == TFESC) sbyte = FESC;
                 ESCAPE = false;
             }
-
-            if (getInterfaceIndex(command) < INTERFACE_COUNT) {
-                    uint8_t index = getInterfaceIndex(command);
-                if (queue_height[index] < CONFIG_QUEUE_MAX_LENGTH && queued_bytes[index] < (getQueueSize(index))) {
-                  queued_bytes[index]++;
-                  packet_queue[index][queue_cursor[index]++] = sbyte;
-                  if (queue_cursor[index] == (getQueueSize(index))) queue_cursor[index] = 0;
-                }
+            if (queue_height < CONFIG_QUEUE_MAX_LENGTH && queued_bytes < CONFIG_QUEUE_SIZE) {
+              queued_bytes++;
+              packet_queue[queue_cursor++] = sbyte;
+              if (queue_cursor == CONFIG_QUEUE_SIZE) queue_cursor = 0;
             }
-        }
-    } else if (command == CMD_INTERFACES) {
-        for (int i = 0; i < INTERFACE_COUNT; i++) {
-            kiss_indicate_interface(i);
         }
     } else if (command == CMD_FREQUENCY) {
       if (sbyte == FESC) {
@@ -665,14 +620,13 @@ void serialCallback(uint8_t sbyte) {
         if (frame_len == 4) {
           uint32_t freq = (uint32_t)cmdbuf[0] << 24 | (uint32_t)cmdbuf[1] << 16 | (uint32_t)cmdbuf[2] << 8 | (uint32_t)cmdbuf[3];
 
-          selected_radio = interface_obj[interface];
           if (freq == 0) {
-            kiss_indicate_frequency(selected_radio);
+            kiss_indicate_frequency();
           } else {
-            if (op_mode == MODE_HOST) selected_radio->setFrequency(freq);
-            kiss_indicate_frequency(selected_radio);
+            lora_freq = freq;
+            if (op_mode == MODE_HOST) setFrequency();
+            kiss_indicate_frequency();
           }
-          interface = 0;
         }
     } else if (command == CMD_BANDWIDTH) {
       if (sbyte == FESC) {
@@ -689,90 +643,76 @@ void serialCallback(uint8_t sbyte) {
         if (frame_len == 4) {
           uint32_t bw = (uint32_t)cmdbuf[0] << 24 | (uint32_t)cmdbuf[1] << 16 | (uint32_t)cmdbuf[2] << 8 | (uint32_t)cmdbuf[3];
 
-          selected_radio = interface_obj[interface];
-
           if (bw == 0) {
-            kiss_indicate_bandwidth(selected_radio);
+            kiss_indicate_bandwidth();
           } else {
-            if (op_mode == MODE_HOST) selected_radio->setSignalBandwidth(bw);
-            selected_radio->updateBitrate();
-            sort_interfaces();
-            kiss_indicate_phy_stats(selected_radio);
-            kiss_indicate_bandwidth(selected_radio);
+            lora_bw = bw;
+            if (op_mode == MODE_HOST) setBandwidth();
+            kiss_indicate_bandwidth();
           }
-          interface = 0;
         }
     } else if (command == CMD_TXPOWER) {
-      selected_radio = interface_obj[interface];
-
       if (sbyte == 0xFF) {
-        kiss_indicate_txpower(selected_radio);
+        kiss_indicate_txpower();
       } else {
-        int8_t txp = (int8_t)sbyte;
+        int txp = sbyte;
+        #if MODEM == SX1262
+          if (txp > 22) txp = 22;
+        #else
+          if (txp > 17) txp = 17;
+        #endif
 
-        if (op_mode == MODE_HOST) setTXPower(selected_radio, txp);
-        kiss_indicate_txpower(selected_radio);
+        lora_txp = txp;
+        if (op_mode == MODE_HOST) setTXPower();
+        kiss_indicate_txpower();
       }
-      interface = 0;
     } else if (command == CMD_SF) {
-      selected_radio = interface_obj[interface];
-
       if (sbyte == 0xFF) {
-        kiss_indicate_spreadingfactor(selected_radio);
+        kiss_indicate_spreadingfactor();
       } else {
         int sf = sbyte;
         if (sf < 5) sf = 5;
         if (sf > 12) sf = 12;
 
-        if (op_mode == MODE_HOST) selected_radio->setSpreadingFactor(sf);
-        selected_radio->updateBitrate();
-        sort_interfaces();
-        kiss_indicate_phy_stats(selected_radio);
-        kiss_indicate_spreadingfactor(selected_radio);
+        lora_sf = sf;
+        if (op_mode == MODE_HOST) setSpreadingFactor();
+        kiss_indicate_spreadingfactor();
       }
-      interface = 0;
     } else if (command == CMD_CR) {
-      selected_radio = interface_obj[interface];
       if (sbyte == 0xFF) {
-        kiss_indicate_codingrate(selected_radio);
+        kiss_indicate_codingrate();
       } else {
         int cr = sbyte;
         if (cr < 5) cr = 5;
         if (cr > 8) cr = 8;
 
-        if (op_mode == MODE_HOST) selected_radio->setCodingRate4(cr);
-        selected_radio->updateBitrate();
-        sort_interfaces();
-        kiss_indicate_phy_stats(selected_radio);
-        kiss_indicate_codingrate(selected_radio);
+        lora_cr = cr;
+        if (op_mode == MODE_HOST) setCodingRate();
+        kiss_indicate_codingrate();
       }
-      interface = 0;
     } else if (command == CMD_IMPLICIT) {
       set_implicit_length(sbyte);
       kiss_indicate_implicit_length();
     } else if (command == CMD_LEAVE) {
       if (sbyte == 0xFF) {
         cable_state   = CABLE_STATE_DISCONNECTED;
-        //current_rssi  = -292;
+        current_rssi  = -292;
         last_rssi     = -292;
         last_rssi_raw = 0x00;
         last_snr_raw  = 0x80;
       }
     } else if (command == CMD_RADIO_STATE) {
-      selected_radio = interface_obj[interface];
       if (bt_state != BT_STATE_CONNECTED) cable_state = CABLE_STATE_CONNECTED;
       if (sbyte == 0xFF) {
-        kiss_indicate_radiostate(selected_radio);
+        kiss_indicate_radiostate();
       } else if (sbyte == 0x00) {
-        stopRadio(selected_radio);
-        kiss_indicate_radiostate(selected_radio);
+        stopRadio();
+        kiss_indicate_radiostate();
       } else if (sbyte == 0x01) {
-        startRadio(selected_radio);
-        kiss_indicate_radiostate(selected_radio);
+        startRadio();
+        kiss_indicate_radiostate();
       }
-      interface = 0;
     } else if (command == CMD_ST_ALOCK) {
-      selected_radio = interface_obj[interface];
       if (sbyte == FESC) {
             ESCAPE = true;
         } else {
@@ -788,17 +728,14 @@ void serialCallback(uint8_t sbyte) {
           uint16_t at = (uint16_t)cmdbuf[0] << 8 | (uint16_t)cmdbuf[1];
 
           if (at == 0) {
-            selected_radio->setSTALock(0.0);
+            st_airtime_limit = 0.0;
           } else {
-            int st_airtime_limit = (float)at/(100.0*100.0);
+            st_airtime_limit = (float)at/(100.0*100.0);
             if (st_airtime_limit >= 1.0) { st_airtime_limit = 0.0; }
-            selected_radio->setSTALock(st_airtime_limit);
           }
-          kiss_indicate_st_alock(selected_radio);
+          kiss_indicate_st_alock();
         }
-        interface = 0;
     } else if (command == CMD_LT_ALOCK) {
-      selected_radio = interface_obj[interface];
       if (sbyte == FESC) {
             ESCAPE = true;
         } else {
@@ -814,15 +751,13 @@ void serialCallback(uint8_t sbyte) {
           uint16_t at = (uint16_t)cmdbuf[0] << 8 | (uint16_t)cmdbuf[1];
 
           if (at == 0) {
-            selected_radio->setLTALock(0.0);
+            lt_airtime_limit = 0.0;
           } else {
-            int lt_airtime_limit = (float)at/(100.0*100.0);
+            lt_airtime_limit = (float)at/(100.0*100.0);
             if (lt_airtime_limit >= 1.0) { lt_airtime_limit = 0.0; }
-            selected_radio->setLTALock(lt_airtime_limit);
           }
-          kiss_indicate_lt_alock(selected_radio);
+          kiss_indicate_lt_alock();
         }
-        interface = 0;
     } else if (command == CMD_STAT_RX) {
       kiss_indicate_stat_rx();
     } else if (command == CMD_STAT_TX) {
@@ -830,18 +765,12 @@ void serialCallback(uint8_t sbyte) {
     } else if (command == CMD_STAT_RSSI) {
       kiss_indicate_stat_rssi();
     } else if (command == CMD_RADIO_LOCK) {
-      selected_radio = interface_obj[interface];
-      update_radio_lock(selected_radio);
-      kiss_indicate_radio_lock(selected_radio);
-      interface = 0;
+      update_radio_lock();
+      kiss_indicate_radio_lock();
     } else if (command == CMD_BLINK) {
       led_indicate_info(sbyte);
     } else if (command == CMD_RANDOM) {
-      // pick an interface at random to get data from
-      int int_index = random(INTERFACE_COUNT);
-      selected_radio = interface_obj[int_index];
-      kiss_indicate_random(getRandom(selected_radio));
-      interface = 0;
+      kiss_indicate_random(getRandom());
     } else if (command == CMD_DETECT) {
       if (sbyte == DETECT_REQ) {
         if (bt_state != BT_STATE_CONNECTED) cable_state = CABLE_STATE_CONNECTED;
@@ -855,8 +784,7 @@ void serialCallback(uint8_t sbyte) {
       }
       kiss_indicate_promisc();
     } else if (command == CMD_READY) {
-      selected_radio = interface_obj[interface];
-      if (!queueFull(selected_radio)) {
+      if (!queueFull()) {
         kiss_indicate_ready();
       } else {
         kiss_indicate_not_ready();
@@ -895,8 +823,7 @@ void serialCallback(uint8_t sbyte) {
     } else if (command == CMD_BOARD) {
       kiss_indicate_board();
     } else if (command == CMD_CONF_SAVE) {
-        // todo: add extra space in EEPROM so this isn't hardcoded
-      eeprom_conf_save(interface_obj[0]);
+      eeprom_conf_save();
     } else if (command == CMD_CONF_DELETE) {
       eeprom_conf_delete();
     } else if (command == CMD_FB_EXT) {
@@ -935,10 +862,13 @@ void serialCallback(uint8_t sbyte) {
         kiss_indicate_fb();
       }
     } else if (command == CMD_DEV_HASH) {
+      #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
         if (sbyte != 0x00) {
           kiss_indicate_device_hash();
         }
+      #endif
     } else if (command == CMD_DEV_SIG) {
+      #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
         if (sbyte == FESC) {
               ESCAPE = true;
           } else {
@@ -954,6 +884,7 @@ void serialCallback(uint8_t sbyte) {
             memcpy(dev_sig, cmdbuf, DEV_SIG_LEN);
             device_save_signature();
           }
+      #endif
     } else if (command == CMD_FW_UPD) {
       if (sbyte == 0x01) {
         firmware_update_mode = true;
@@ -961,6 +892,7 @@ void serialCallback(uint8_t sbyte) {
         firmware_update_mode = false;
       }
     } else if (command == CMD_HASHES) {
+      #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
         if (sbyte == 0x01) {
           kiss_indicate_target_fw_hash();
         } else if (sbyte == 0x02) {
@@ -970,7 +902,9 @@ void serialCallback(uint8_t sbyte) {
         } else if (sbyte == 0x04) {
           kiss_indicate_partition_table_hash();
         }
+      #endif
     } else if (command == CMD_FW_HASH) {
+      #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
         if (sbyte == FESC) {
               ESCAPE = true;
           } else {
@@ -986,6 +920,7 @@ void serialCallback(uint8_t sbyte) {
             memcpy(dev_firmware_hash_target, cmdbuf, DEV_HASH_LEN);
             device_save_firmware_hash();
           }
+      #endif
     } else if (command == CMD_BT_CTRL) {
       #if HAS_BLUETOOTH || HAS_BLE
         if (sbyte == 0x00) {
@@ -1036,8 +971,106 @@ void serialCallback(uint8_t sbyte) {
   portMUX_TYPE update_lock = portMUX_INITIALIZER_UNLOCKED;
 #endif
 
-void validate_status() {
+void updateModemStatus() {
   #if MCU_VARIANT == MCU_ESP32
+    portENTER_CRITICAL(&update_lock);
+  #elif MCU_VARIANT == MCU_NRF52
+    portENTER_CRITICAL();
+  #endif
+
+  uint8_t status = LoRa->modemStatus();
+  current_rssi = LoRa->currentRssi();
+  last_status_update = millis();
+
+  #if MCU_VARIANT == MCU_ESP32
+    portEXIT_CRITICAL(&update_lock);
+  #elif MCU_VARIANT == MCU_NRF52
+    portEXIT_CRITICAL();
+  #endif
+
+  if ((status & SIG_DETECT) == SIG_DETECT) { stat_signal_detected = true; } else { stat_signal_detected = false; }
+  if ((status & SIG_SYNCED) == SIG_SYNCED) { stat_signal_synced = true; } else { stat_signal_synced = false; }
+  if ((status & RX_ONGOING) == RX_ONGOING) { stat_rx_ongoing = true; } else { stat_rx_ongoing = false; }
+
+  // if (stat_signal_detected || stat_signal_synced || stat_rx_ongoing) {
+  if (stat_signal_detected || stat_signal_synced) {
+    if (stat_rx_ongoing) {
+      if (dcd_count < dcd_threshold) {
+        dcd_count++;
+      } else {
+        last_dcd = last_status_update;
+        dcd_led = true;
+        dcd = true;
+      }
+    }
+  } else {
+    #define DCD_LED_STEP_D 3
+    if (dcd_count == 0) {
+      dcd_led = false;
+    } else if (dcd_count > DCD_LED_STEP_D) {
+      dcd_count -= DCD_LED_STEP_D;
+    } else {
+      dcd_count = 0;
+    }
+
+    if (last_status_update > last_dcd+csma_slot_ms) {
+      dcd = false;
+      dcd_led = false;
+      dcd_count = 0;
+    }
+  }
+
+  if (dcd_led) {
+    led_rx_on();
+  } else {
+    if (airtime_lock) {
+      led_indicate_airtime_lock();
+    } else {
+      led_rx_off();
+    }
+  }
+}
+
+void checkModemStatus() {
+  if (millis()-last_status_update >= status_interval_ms) {
+    updateModemStatus();
+
+    #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+      util_samples[dcd_sample] = dcd;
+      dcd_sample = (dcd_sample+1)%DCD_SAMPLES;
+      if (dcd_sample % UTIL_UPDATE_INTERVAL == 0) {
+        int util_count = 0;
+        for (int ui = 0; ui < DCD_SAMPLES; ui++) {
+          if (util_samples[ui]) util_count++;
+        }
+        local_channel_util = (float)util_count / (float)DCD_SAMPLES;
+        total_channel_util = local_channel_util + airtime;
+        if (total_channel_util > 1.0) total_channel_util = 1.0;
+
+        int16_t cb = current_airtime_bin();
+        uint16_t nb = cb+1; if (nb == AIRTIME_BINS) { nb = 0; }
+        if (total_channel_util > longterm_bins[cb]) longterm_bins[cb] = total_channel_util;
+        longterm_bins[nb] = 0.0;
+
+        update_airtime();
+      }
+    #endif
+  }
+}
+
+void validate_status() {
+  #if MCU_VARIANT == MCU_1284P
+      uint8_t boot_flags = OPTIBOOT_MCUSR;
+      uint8_t F_POR = PORF;
+      uint8_t F_BOR = BORF;
+      uint8_t F_WDR = WDRF;
+  #elif MCU_VARIANT == MCU_2560
+      uint8_t boot_flags = OPTIBOOT_MCUSR;
+      if (boot_flags == 0x00) boot_flags = 0x03;
+      uint8_t F_POR = PORF;
+      uint8_t F_BOR = BORF;
+      uint8_t F_WDR = WDRF;
+  #elif MCU_VARIANT == MCU_ESP32
       // TODO: Get ESP32 boot flags
       uint8_t boot_flags = 0x02;
       uint8_t F_POR = 0x00;
@@ -1085,12 +1118,16 @@ void validate_status() {
       if (eeprom_product_valid() && eeprom_model_valid() && eeprom_hwrev_valid()) {
         if (eeprom_checksum_valid()) {
           eeprom_ok = true;
-          if (modems_installed) {
+          if (modem_installed) {
+            #if PLATFORM == PLATFORM_ESP32 || PLATFORM == PLATFORM_NRF52
               if (device_init()) {
                 hw_ready = true;
               } else {
                 hw_ready = false;
               }
+            #else
+              hw_ready = true;
+            #endif
           } else {
             hw_ready = false;
             Serial.write("No valid radio module found\r\n");
@@ -1100,6 +1137,12 @@ void validate_status() {
                 update_display();
               }
             #endif
+          }
+          
+          if (hw_ready && eeprom_have_conf()) {
+            eeprom_conf_load();
+            op_mode = MODE_TNC;
+            startRadio();
           }
         } else {
           hw_ready = false;
@@ -1141,84 +1184,90 @@ void validate_status() {
   }
 }
 
+#if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+  #define _e 2.71828183
+  #define _S 10.0
+  float csma_slope(float u) { return (pow(_e,_S*u-_S/2.0))/(pow(_e,_S*u-_S/2.0)+1.0); }
+  void update_csma_p() {
+      csma_p = (uint8_t)((1.0-(csma_p_min+(csma_p_max-csma_p_min)*csma_slope(airtime)))*255.0);
+}
+#endif
+
 void loop() {
-      packet_poll();
-
-    bool ready = false;
-    for (int i = 0; i < INTERFACE_COUNT; i++) {
-        selected_radio = interface_obj[i];
-        if (selected_radio->getRadioOnline()) {
-            selected_radio->checkModemStatus();
-            ready = true;
-        }
-    }
-
-
-  // If at least one radio is online then we can continue
-  if (ready) {
+  if (radio_online) {
+    #if MCU_VARIANT == MCU_ESP32
       if (packet_ready) {
-        selected_radio = interface_obj[packet_interface];
-        #if MCU_VARIANT == MCU_ESP32
         portENTER_CRITICAL(&update_lock);
-        #elif MCU_VARIANT == MCU_NRF52
-        portENTER_CRITICAL();
-        #endif
-        last_rssi = selected_radio->packetRssi();
-        last_snr_raw = selected_radio->packetSnrRaw();
-        #if MCU_VARIANT == MCU_ESP32
+        last_rssi = LoRa->packetRssi();
+        last_snr_raw = LoRa->packetSnrRaw();
         portEXIT_CRITICAL(&update_lock);
-        #elif MCU_VARIANT == MCU_NRF52
-        portEXIT_CRITICAL();
-        #endif
         kiss_indicate_stat_rssi();
         kiss_indicate_stat_snr();
-        kiss_write_packet(packet_interface);
+        kiss_write_packet();
       }
-        
-    for (int i = 0; i < INTERFACE_COUNT; i++) {
-        selected_radio = interface_obj_sorted[i];
 
-        if (selected_radio->calculateALock() || !selected_radio->getRadioOnline()) {
-            // skip this interface
-            continue;
-        }
+      airtime_lock = false;
+      if (st_airtime_limit != 0.0 && airtime >= st_airtime_limit) airtime_lock = true;
+      if (lt_airtime_limit != 0.0 && longterm_airtime >= lt_airtime_limit) airtime_lock = true;
 
-        // If a higher data rate interface has received a packet after its
-        // loop, it still needs to be the first to transmit, so check if this
-        // is the case.
-        for (int j = 0; j < INTERFACE_COUNT; j++) {
-            if (!interface_obj_sorted[j]->calculateALock() || interface_obj_sorted[j]->getRadioOnline()) {
-                if (interface_obj_sorted[j]->getBitrate() > selected_radio->getBitrate()) {
-                    if (queue_height[interface_obj_sorted[j]->getIndex()] > 0) {
-                        selected_radio = interface_obj_sorted[j];
-                    }
+    #elif MCU_VARIANT == MCU_NRF52
+      if (packet_ready) {
+        portENTER_CRITICAL();
+        last_rssi = LoRa->packetRssi();
+        last_snr_raw = LoRa->packetSnrRaw();
+        portEXIT_CRITICAL();
+        kiss_indicate_stat_rssi();
+        kiss_indicate_stat_snr();
+        kiss_write_packet();
+      }
+
+      airtime_lock = false;
+      if (st_airtime_limit != 0.0 && airtime >= st_airtime_limit) airtime_lock = true;
+      if (lt_airtime_limit != 0.0 && longterm_airtime >= lt_airtime_limit) airtime_lock = true;
+    #endif
+
+    checkModemStatus();
+    if (!airtime_lock) {
+      if (queue_height > 0) {
+        #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+          long check_time = millis();
+          if (check_time > post_tx_yield_timeout) {
+            if (dcd_waiting && (check_time >= dcd_wait_until)) { dcd_waiting = false; }
+            if (!dcd_waiting) {
+              for (uint8_t dcd_i = 0; dcd_i < dcd_threshold*2; dcd_i++) {
+                delay(STATUS_INTERVAL_MS); updateModemStatus();
+              }
+
+              if (!dcd) {
+                uint8_t csma_r = (uint8_t)random(256);
+                if (csma_p >= csma_r) {
+                  flushQueue();
+                } else {
+                  dcd_waiting = true;
+                  dcd_wait_until = millis()+csma_slot_ms;
                 }
+              }
             }
-        }
+          }
+          
+        #else
+          if (!dcd_waiting) updateModemStatus();
 
-        if (queue_height[selected_radio->getIndex()] > 0) {
-            long check_time = millis();
-            if (check_time > selected_radio->getPostTxYieldTimeout()) {
-                if (selected_radio->getDCDWaiting() && (check_time >= selected_radio->getDCDWaitUntil())) { selected_radio->setDCDWaiting(false); }
-                if (!selected_radio->getDCDWaiting()) {
-                    // todo, will the delay here slow down transmission with
-                    // multiple interfaces? needs investigation
-                    for (uint8_t dcd_i = 0; dcd_i < DCD_THRESHOLD*2; dcd_i++) {
-                        delay(STATUS_INTERVAL_MS); selected_radio->updateModemStatus();
-                    }
+          if (!dcd && !dcd_led) {
+            if (dcd_waiting) delay(lora_rx_turnaround_ms);
 
-                    if (!selected_radio->getDCD()) {
-                        uint8_t csma_r = (uint8_t)random(256);
-                        if (selected_radio->getCSMAp() >= csma_r) {
-                            flushQueue(selected_radio);
-                        } else {
-                            selected_radio->setDCDWaiting(true);
-                            selected_radio->setDCDWaitUntil(millis()+selected_radio->getCSMASlotMS());
-                        }
-                    }
-                }
+            updateModemStatus();
+
+            if (!dcd) {
+              dcd_waiting = false;
+              flushQueue();
             }
-        }
+
+          } else {
+            dcd_waiting = true;
+          }
+        #endif
+      }
     }
   
   } else {
@@ -1231,36 +1280,21 @@ void loop() {
         led_indicate_standby();
       }
     } else {
+
       led_indicate_not_ready();
-      // shut down all radio interfaces
-      for (int i = 0; i < INTERFACE_COUNT; i++) {
-          stopRadio(interface_obj[i]);
-      }
+      stopRadio();
     }
   }
 
-  buffer_serial();
-  if (!fifo_isempty(&serialFIFO)) serial_poll();
+  #if MCU_VARIANT == MCU_ESP32 || MCU_VARIANT == MCU_NRF52
+      buffer_serial();
+      if (!fifo_isempty(&serialFIFO)) serial_poll();
+  #else
+    if (!fifo_isempty_locked(&serialFIFO)) serial_poll();
+  #endif
 
   #if HAS_DISPLAY
-    #if DISPLAY == OLED
     if (disp_ready) update_display();
-    #elif DISPLAY == EINK_BW || DISPLAY == EINK_3C
-    // Display refreshes take so long on e-paper displays that they can disrupt
-    // the regular operation of the device. To combat this the time it is
-    // chosen to do so must be strategically chosen. Particularly on the
-    // RAK4631, the display and the potentially installed SX1280 modem share
-    // the same SPI bus. Thus it is not possible to solve this by utilising the
-    // callback functionality to poll the modem in this case. todo, this may be
-    // able to be improved in the future.
-    if (disp_ready) {
-        if (millis() - last_tx >= 4000) {
-            if (millis() - last_rx >= 1000) {
-                update_display();
-            }
-        }
-    }
-    #endif
   #endif
 
   #if HAS_PMU
@@ -1276,14 +1310,9 @@ void loop() {
   #endif
 }
 
-void process_serial() {
-      buffer_serial();
-      if (!fifo_isempty(&serialFIFO)) serial_poll();
-}
-
 void sleep_now() {
   #if HAS_SLEEP == true
-    #if BOARD_MODEL == BOARD_T3S3
+    #if BOARD_MODEL == BOARD_RNODE_NG_22
       display_intensity = 0;
       update_display(true);
     #endif
@@ -1302,35 +1331,15 @@ void button_event(uint8_t event, unsigned long duration) {
   }
 }
 
-void poll_buffers() {
-    process_serial();
-}
-
-void packet_poll() {
-    #if MCU_VARIANT == MCU_ESP32
-    portENTER_CRITICAL(&update_lock);
-    #elif MCU_VARIANT == MCU_NRF52
-    portENTER_CRITICAL();
-    #endif
-    // If we have received a packet on an interface which needs to be processed
-    if (process_packet) {
-        selected_radio = interface_obj[packet_interface];
-        selected_radio->clearIRQStatus();
-        selected_radio->handleDio0Rise();
-        process_packet = false;
-    }
-    #if MCU_VARIANT == MCU_ESP32
-    portEXIT_CRITICAL(&update_lock);
-    #elif MCU_VARIANT == MCU_NRF52
-    portEXIT_CRITICAL();
-    #endif
-}
-
 volatile bool serial_polling = false;
 void serial_poll() {
   serial_polling = true;
 
+  #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+  while (!fifo_isempty_locked(&serialFIFO)) {
+  #else
   while (!fifo_isempty(&serialFIFO)) {
+  #endif
     char sbyte = fifo_pop(&serialFIFO);
     serialCallback(sbyte);
   }
@@ -1338,8 +1347,11 @@ void serial_poll() {
   serial_polling = false;
 }
 
-#define MAX_CYCLES 20
-
+#if MCU_VARIANT != MCU_ESP32
+  #define MAX_CYCLES 20
+#else
+  #define MAX_CYCLES 10
+#endif
 void buffer_serial() {
   if (!serial_buffering) {
     serial_buffering = true;
@@ -1357,7 +1369,11 @@ void buffer_serial() {
     {
       c++;
 
-      #if HAS_BLUETOOTH || HAS_BLE == true
+      #if MCU_VARIANT != MCU_ESP32 && MCU_VARIANT != MCU_NRF52
+        if (!fifo_isfull_locked(&serialFIFO)) {
+          fifo_push_locked(&serialFIFO, Serial.read());
+        }
+      #elif HAS_BLUETOOTH || HAS_BLE == true
         if (bt_state == BT_STATE_CONNECTED) {
           if (!fifo_isfull(&serialFIFO)) {
             fifo_push(&serialFIFO, SerialBT.read());
@@ -1377,3 +1393,41 @@ void buffer_serial() {
     serial_buffering = false;
   }
 }
+
+void serial_interrupt_init() {
+  #if MCU_VARIANT == MCU_1284P
+      TCCR3A = 0;
+      TCCR3B = _BV(CS10) |
+               _BV(WGM33)|
+               _BV(WGM32);
+
+      // Buffer incoming frames every 1ms
+      ICR3 = 16000;
+
+      TIMSK3 = _BV(ICIE3);
+
+  #elif MCU_VARIANT == MCU_2560
+      // TODO: This should probably be updated for
+      // atmega2560 support. Might be source of
+      // reported issues from snh.
+      TCCR3A = 0;
+      TCCR3B = _BV(CS10) |
+               _BV(WGM33)|
+               _BV(WGM32);
+
+      // Buffer incoming frames every 1ms
+      ICR3 = 16000;
+
+      TIMSK3 = _BV(ICIE3);
+
+  #elif MCU_VARIANT == MCU_ESP32
+      // No interrupt-based polling on ESP32
+  #endif
+
+}
+
+#if MCU_VARIANT == MCU_1284P || MCU_VARIANT == MCU_2560
+  ISR(TIMER3_CAPT_vect) {
+    buffer_serial();
+  }
+#endif
