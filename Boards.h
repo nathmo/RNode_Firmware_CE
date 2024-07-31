@@ -627,6 +627,7 @@
       };
       #elif BOARD_MODEL == BOARD_GENERIC_ESP32_C3
       #define HAS_BLUETOOTH false
+      #define HAS_BLE true
       #define HAS_CONSOLE true
       #define HAS_EEPROM true
       #define INTERFACE_COUNT 1
