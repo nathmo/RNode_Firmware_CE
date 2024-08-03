@@ -1111,23 +1111,17 @@ byte sx127x::random() { return readRegister(REG_RSSI_WIDEBAND_7X); }
 void sx127x::flush() { }
 
 bool sx127x::preInit() {
-  Serial.write("preInitRadio\r\n");
+
   pinMode(_ss, OUTPUT);
-  Serial.write("preInitRadio2\r\n");
   digitalWrite(_ss, HIGH);
-  Serial.write("preInitRadio3\r\n");
   // todo: check if this change causes issues on any platforms
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
-    Serial.write("test1\r\n");
     //_spiModem.begin(_sclk, _miso, _mosi, _ss);
-    Serial.write("test1Done\r\n");
   } else {
-    Serial.write("test2\r\n");
     //_spiModem.begin();
   }
   #else
-    Serial.write("test3\r\n");
     _spiModem.begin();
   
   #endif
@@ -1135,36 +1129,25 @@ bool sx127x::preInit() {
   // Check modem version
   uint8_t version;
   long start = millis();
-  Serial.write("millisAndShit\r\n");
   while (((millis() - start) < 500) && (millis() >= start)) {
-      Serial.write("reading REG_VERSION_7X\r\n");
       version = readRegister(REG_VERSION_7X);
-      Serial.write("hello there\r\n");
       if (version == 0x12) { break; }
       delay(100);
   }
-  Serial.write("so far\r\n");
   if (version != 0x12) { return false; }
-  Serial.write("its 0x12\r\n");
+
   _preinit_done = true;
   return true;
 }
 
 uint8_t ISR_VECT sx127x::singleTransfer(uint8_t address, uint8_t value) {
   uint8_t response;
-  Serial.write("singleTransfer A\r\n");
   digitalWrite(_ss, LOW);
-  Serial.write("singleTransfer B\r\n");
   _spiModem.beginTransaction(_spiSettings);
-  Serial.write("singleTransfer C\r\n");
   _spiModem.transfer(address);
-  Serial.write("singleTransfer D\r\n");
   response = _spiModem.transfer(value);
-  Serial.write("singleTransfer E\r\n");
   _spiModem.endTransaction();
-  Serial.write("singleTransfer F\r\n");
   digitalWrite(_ss, HIGH);
-  Serial.write("singleTransfer G\r\n");
   return response;
 }
 
