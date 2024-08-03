@@ -97,19 +97,16 @@ void setup() {
   // is disabled on this platform.
     while (!Serial);
   #endif
-    Serial.write("A\r\n");
 
   // Configure input and output pins
   #if HAS_INPUT
     input_init();
   #endif
 
-    Serial.write("B\r\n");
   #if HAS_NP == false
     pinMode(pin_led_rx, OUTPUT);
     pinMode(pin_led_tx, OUTPUT);
   #endif
-    Serial.write("C\r\n");
 
   for (int i = 0; i < INTERFACE_COUNT; i++) {
     if (interface_pins[i][9] != -1) {
@@ -117,7 +114,6 @@ void setup() {
         digitalWrite(interface_pins[i][9], HIGH);
     }
   }
-    Serial.write("D\r\n");
   // Initialise buffers
   memset(pbuf, 0, sizeof(pbuf));
   memset(cmdbuf, 0, sizeof(cmdbuf));
@@ -130,11 +126,11 @@ void setup() {
       fifo16_init(&packet_lengths[i], packet_lengths_buf, CONFIG_QUEUE_MAX_LENGTH);
       packet_queue[i] = (uint8_t*)malloc(getQueueSize(i));
   }
-    Serial.write("G\r\n");
+
   // Create and configure interface objects
   for (uint8_t i = 0; i < INTERFACE_COUNT; i++) {
       switch (interfaces[i]) {
-                  Serial.write("H\r\n");
+
           case SX126X:
           case SX1262:
           {
@@ -161,7 +157,7 @@ void setup() {
           case SX1276:
           case SX1278:
           {
-            Serial.write("I\r\n");
+
               sx127x* obj;
               // if default spi enabled
               if (interface_cfg[i][0]) {
@@ -182,7 +178,7 @@ void setup() {
           case SX128X:
           case SX1280:
           {
-            Serial.write("J\r\n");
+
               sx128x* obj;
               // if default spi enabled
               if (interface_cfg[i][0]) {
@@ -206,7 +202,7 @@ void setup() {
             break;
       }
   }
-Serial.write("K\r\n");
+
     // Check installed transceiver chip(s) and probe boot parameters. If any of
     // the configured modems cannot be initialised, do not boot
     for (int i = 0; i < INTERFACE_COUNT; i++) {
@@ -225,43 +221,41 @@ Serial.write("K\r\n");
                 modems_installed = false;
                 break;
         }
-      Serial.write("L\r\n");
-       Serial.write("Lin\r\n");
+
         if (selected_radio->preInit()) {
-          Serial.write("L0\r\n");
+
           modems_installed = true;
-          Serial.write("L1\r\n");
+
           uint32_t lfr = selected_radio->getFrequency();
-          Serial.write("L2\r\n");
+
           if (lfr == 0) {
             // Normal boot
-            Serial.write("L3A\r\n");
+
           } else if (lfr == M_FRQ_R) {
             // Quick reboot
-            Serial.write("L3B\r\n");
+
             #if HAS_CONSOLE
               if (rtc_get_reset_reason(0) == POWERON_RESET) {
-                Serial.write("L3B2\r\n");
                 console_active = true;
               }
             #endif
           } else {
-            Serial.write("L3C\r\n");
+
             // Unknown boot
           }
           selected_radio->setFrequency(M_FRQ_S);
-          Serial.write("L4\r\n");
+
         } else {
-          Serial.write("L5\r\n");
+
           modems_installed = false;
-          Serial.write("L6\r\n");
+
         }
         if (!modems_installed) {
-          Serial.write("L7\r\n");
+
             break;
         }
     }
-Serial.write("M\r\n");
+
 
   #if HAS_DISPLAY
     #if HAS_EEPROM
@@ -280,16 +274,14 @@ Serial.write("M\r\n");
     disp_ready = display_init();
     update_display();
   #endif
-Serial.write("N\r\n");
     #if HAS_PMU == true
       pmu_ready = init_pmu();
     #endif
-Serial.write("O\r\n");
     #if HAS_BLUETOOTH || HAS_BLE == true
       bt_init();
       bt_init_ran = true;
     #endif
-Serial.write("P\r\n");
+
     if (console_active) {
       #if HAS_CONSOLE
         console_start();
@@ -299,11 +291,8 @@ Serial.write("P\r\n");
     } else {
       kiss_indicate_reset();
     }
-Serial.write("Q\r\n");
-  // Validate board health, EEPROM and config
-  Serial.write("config done, validating\r\n");    
+  // Validate board health, EEPROM and config  
   validate_status();
-  Serial.write("validation done\r\n");
 }
 
 void lora_receive(RadioInterface* radio) {
