@@ -59,7 +59,6 @@ volatile uint8_t packet_interface = 0;
 uint8_t *packet_queue[INTERFACE_COUNT];
 
 void setup() {
-  delay(5000);
   #if MCU_VARIANT == MCU_ESP32
     boot_seq();
     EEPROM.begin(EEPROM_SIZE);
