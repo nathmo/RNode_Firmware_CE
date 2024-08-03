@@ -614,9 +614,9 @@
                   // SX1262
           {
                7, // pin_ss
-               5, // pin_sclk
-               6, // pin_mosi
-               3, // pin_miso
+              -1, // pin_sclk
+              -1, // pin_mosi
+              -1, // pin_miso
               34, // pin_busy
               33, // pin_dio
                8, // pin_reset
@@ -628,6 +628,7 @@
       #elif BOARD_MODEL == BOARD_GENERIC_ESP32_C3
       #define HAS_BLUETOOTH false
       #define HAS_BLE true
+      #define HAS_PMU true
       #define HAS_CONSOLE true
       #define HAS_EEPROM true
       #define INTERFACE_COUNT 1
