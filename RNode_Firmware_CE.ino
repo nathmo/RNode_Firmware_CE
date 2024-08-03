@@ -227,6 +227,7 @@ Serial.write("K\r\n");
         }
       Serial.write("L\r\n");
         if (selected_radio->preInit()) {
+          Serial.write("L0\r\n");
           modems_installed = true;
           Serial.write("L1\r\n");
           uint32_t lfr = selected_radio->getFrequency();
