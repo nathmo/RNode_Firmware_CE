@@ -228,24 +228,34 @@ Serial.write("K\r\n");
       Serial.write("L\r\n");
         if (selected_radio->preInit()) {
           modems_installed = true;
+          Serial.write("L1\r\n");
           uint32_t lfr = selected_radio->getFrequency();
+          Serial.write("L2\r\n");
           if (lfr == 0) {
             // Normal boot
+            Serial.write("L3A\r\n");
           } else if (lfr == M_FRQ_R) {
             // Quick reboot
+            Serial.write("L3B\r\n");
             #if HAS_CONSOLE
               if (rtc_get_reset_reason(0) == POWERON_RESET) {
+                Serial.write("L3B2\r\n");
                 console_active = true;
               }
             #endif
           } else {
+            Serial.write("L3C\r\n");
             // Unknown boot
           }
           selected_radio->setFrequency(M_FRQ_S);
+          Serial.write("L4\r\n");
         } else {
+          Serial.write("L5\r\n");
           modems_installed = false;
+          Serial.write("L6\r\n");
         }
         if (!modems_installed) {
+          Serial.write("L7\r\n");
             break;
         }
     }
