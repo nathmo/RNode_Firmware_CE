@@ -226,6 +226,7 @@ Serial.write("K\r\n");
                 break;
         }
       Serial.write("L\r\n");
+       Serial.write("Lin\r\n");
         if (selected_radio->preInit()) {
           Serial.write("L0\r\n");
           modems_installed = true;
