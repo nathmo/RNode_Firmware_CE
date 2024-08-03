@@ -1121,6 +1121,7 @@ bool sx127x::preInit() {
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
     Serial.write("test1\r\n");
     _spiModem.begin(_sclk, _miso, _mosi, _ss);
+    Serial.write("test1Done\r\n");
   } else {
     Serial.write("test2\r\n");
     _spiModem.begin();
@@ -1134,6 +1135,7 @@ bool sx127x::preInit() {
   // Check modem version
   uint8_t version;
   long start = millis();
+  Serial.write("millisAndShit\r\n");
   while (((millis() - start) < 500) && (millis() >= start)) {
       version = readRegister(REG_VERSION_7X);
     Serial.write("hello there\r\n");
