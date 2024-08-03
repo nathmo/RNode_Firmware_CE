@@ -647,9 +647,9 @@
                   // SX127X
           {
               7, // pin_ss
-              -1, // pin_sclk 4
-              -1, // pin_mosi 6
-              -1, // pin_miso 5
+              4, // pin_sclk 4
+              6, // pin_mosi 6
+              5, // pin_miso 5
               -1, // pin_busy
               2, // pin_dio
               3, // pin_reset
