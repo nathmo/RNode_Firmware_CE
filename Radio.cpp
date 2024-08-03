@@ -1111,17 +1111,24 @@ byte sx127x::random() { return readRegister(REG_RSSI_WIDEBAND_7X); }
 void sx127x::flush() { }
 
 bool sx127x::preInit() {
+  Serial.write("preInitRadio\r\n");
   pinMode(_ss, OUTPUT);
+  Serial.write("preInitRadio2\r\n");
   digitalWrite(_ss, HIGH);
+  Serial.write("preInitRadio3\r\n");
   // todo: check if this change causes issues on any platforms
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
+    Serial.write("test1\r\n");
     _spiModem.begin(_sclk, _miso, _mosi, _ss);
   } else {
+    Serial.write("test2\r\n");
     _spiModem.begin();
   }
   #else
+    Serial.write("test3\r\n");
     _spiModem.begin();
+  
   #endif
 
   // Check modem version
@@ -1129,12 +1136,13 @@ bool sx127x::preInit() {
   long start = millis();
   while (((millis() - start) < 500) && (millis() >= start)) {
       version = readRegister(REG_VERSION_7X);
+    Serial.write("hello there\r\n");
       if (version == 0x12) { break; }
       delay(100);
   }
-
+  Serial.write("so far\r\n");
   if (version != 0x12) { return false; }
-
+  Serial.write("its 0x12\r\n");
   _preinit_done = true;
   return true;
 }
