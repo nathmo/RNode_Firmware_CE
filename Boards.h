@@ -614,9 +614,9 @@
                   // SX1262
           {
                7, // pin_ss
-              -1, // pin_sclk
-              -1, // pin_mosi
-              -1, // pin_miso
+              5, // pin_sclk
+              6, // pin_mosi
+              3, // pin_miso
               34, // pin_busy
               33, // pin_dio
                8, // pin_reset
@@ -647,9 +647,9 @@
                   // SX127X
           {
               7, // pin_ss
-              4, // pin_sclk
-              6, // pin_mosi
-              5, // pin_miso
+              -1, // pin_sclk 4
+              -1, // pin_mosi 6
+              -1, // pin_miso 5
               -1, // pin_busy
               2, // pin_dio
               3, // pin_reset
