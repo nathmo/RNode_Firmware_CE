@@ -1152,14 +1152,19 @@ bool sx127x::preInit() {
 
 uint8_t ISR_VECT sx127x::singleTransfer(uint8_t address, uint8_t value) {
   uint8_t response;
-
+  Serial.write("singleTransfer A\r\n");
   digitalWrite(_ss, LOW);
+  Serial.write("singleTransfer B\r\n");
   _spiModem.beginTransaction(_spiSettings);
+  Serial.write("singleTransfer C\r\n");
   _spiModem.transfer(address);
+  Serial.write("singleTransfer D\r\n");
   response = _spiModem.transfer(value);
+  Serial.write("singleTransfer E\r\n");
   _spiModem.endTransaction();
+  Serial.write("singleTransfer F\r\n");
   digitalWrite(_ss, HIGH);
-
+  Serial.write("singleTransfer G\r\n");
   return response;
 }
 
