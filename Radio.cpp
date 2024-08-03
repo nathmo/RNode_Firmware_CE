@@ -1137,8 +1137,9 @@ bool sx127x::preInit() {
   long start = millis();
   Serial.write("millisAndShit\r\n");
   while (((millis() - start) < 500) && (millis() >= start)) {
+      Serial.write("reading REG_VERSION_7X\r\n");
       version = readRegister(REG_VERSION_7X);
-    Serial.write("hello there\r\n");
+      Serial.write("hello there\r\n");
       if (version == 0x12) { break; }
       delay(100);
   }
