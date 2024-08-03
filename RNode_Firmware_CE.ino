@@ -88,7 +88,6 @@ void setup() {
   fifo_init(&serialFIFO, serialBuffer, CONFIG_UART_BUFFER_SIZE);
 
   Serial.begin(serial_baudrate);
-  Serial.write("starting config\r\n");
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
   // the full firmware. In the case of the RAK4631, the line below will wait
@@ -116,10 +115,8 @@ void setup() {
   // Initialise buffers
   memset(pbuf, 0, sizeof(pbuf));
   memset(cmdbuf, 0, sizeof(cmdbuf));
-    Serial.write("E\r\n");
   memset(packet_starts_buf, 0, sizeof(packet_starts_buf));
   memset(packet_lengths_buf, 0, sizeof(packet_starts_buf));
-    Serial.write("F\r\n");
   for (int i = 0; i < INTERFACE_COUNT; i++) {
       fifo16_init(&packet_starts[i], packet_starts_buf, CONFIG_QUEUE_MAX_LENGTH);
       fifo16_init(&packet_lengths[i], packet_lengths_buf, CONFIG_QUEUE_MAX_LENGTH);
