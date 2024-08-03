@@ -1117,9 +1117,9 @@ bool sx127x::preInit() {
   // todo: check if this change causes issues on any platforms
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
-    //_spiModem.begin(_sclk, _miso, _mosi, _ss);
+    _spiModem.begin(_sclk, _miso, _mosi, _ss);
   } else {
-    //_spiModem.begin();
+    _spiModem.begin();
   }
   #else
     _spiModem.begin();
