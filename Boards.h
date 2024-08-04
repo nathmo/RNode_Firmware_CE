@@ -629,7 +629,7 @@
       #define HAS_BLUETOOTH false
       #define HAS_BLE true
       #define HAS_PMU true
-      #define HAS_CONSOLE true
+      #define HAS_CONSOLE false // need some firmware modification to make it work : https://github.com/espressif/arduino-esp32/issues/8040
       #define HAS_EEPROM true
       #define INTERFACE_COUNT 1
       const int pin_led_rx = 9;
