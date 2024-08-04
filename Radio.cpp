@@ -1392,6 +1392,7 @@ void sx127x::setFrequency(uint32_t frequency) {
 uint32_t sx127x::getFrequency() {
   Serial.write("getFrequency start\r\n");
   uint8_t msb = readRegister(REG_FRF_MSB_7X);
+  Serial.write("getFrequency register 1 success\r\n");
   uint8_t mid = readRegister(REG_FRF_MID_7X);
   uint8_t lsb = readRegister(REG_FRF_LSB_7X);
 
