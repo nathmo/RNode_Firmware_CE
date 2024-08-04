@@ -1118,14 +1118,17 @@ bool sx127x::preInit() {
   Serial.write("pre init before begin \r\n");
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
+    Serial.write("_spiModem.begin(_sclk, _miso, _mosi, _ss) \r\n");
     _spiModem.begin(_sclk, _miso, _mosi, _ss);
   } else {
+    Serial.write("_spiModem.begin() ESP32\r\n");
     _spiModem.begin();
   }
   #else
+    Serial.write("_spiModem.begin()\r\n");
     _spiModem.begin();
-  Serial.write("pre init after begin \r\n");
   #endif
+  Serial.write("pre init after begin \r\n");
   // Check modem version
   uint8_t version;
   long start = millis();
