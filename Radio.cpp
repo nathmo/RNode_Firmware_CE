@@ -1115,29 +1115,15 @@ bool sx127x::preInit() {
   pinMode(_ss, OUTPUT);
   digitalWrite(_ss, HIGH);
   // todo: check if this change causes issues on any platforms
-  Serial.write("pre init before begin \r\n");
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
-    Serial.write("_sclk\r\n");
-    Serial.write((_sclk)+48);
-    Serial.write("_miso\r\n");
-    Serial.write((_miso)+48);
-    Serial.write("_mosi\r\n");
-    Serial.write((_mosi)+48);
-    Serial.write("_ss\r\n");
-    Serial.write((_ss)+48);
-    
-    Serial.write("_spiModem.begin(_sclk, _miso, _mosi, _ss) \r\n");
     _spiModem.begin(_sclk, _miso, _mosi, _ss);
   } else {
-    Serial.write("_spiModem.begin() ESP32\r\n");
     _spiModem.begin();
   }
   #else
-    Serial.write("_spiModem.begin()\r\n");
     _spiModem.begin();
   #endif
-  Serial.write("pre init after begin \r\n");
   // Check modem version
   uint8_t version;
   long start = millis();
@@ -1148,30 +1134,22 @@ bool sx127x::preInit() {
   }
   if (version != 0x12) { return false; }
   _preinit_done = true;
-  Serial.write("pre initDone\r\n");
   return true;
 }
 
 uint8_t ISR_VECT sx127x::singleTransfer(uint8_t address, uint8_t value) {
   uint8_t response;
   digitalWrite(_ss, LOW);
-  Serial.write("A\r\n");
   _spiModem.beginTransaction(_spiSettings); // this crash the ESP32C3
-  Serial.write("B\r\n");
   _spiModem.transfer(address);
-  Serial.write("C\r\n");
   response = _spiModem.transfer(value);
-  Serial.write("D\r\n");
   _spiModem.endTransaction();
-  Serial.write("E\r\n");
   digitalWrite(_ss, HIGH);
   return response;
 }
 
 int sx127x::begin() {
-  Serial.write("begin start\r\n");
   if (_reset != -1) {
-    Serial.write("begin if 1\r\n");
     pinMode(_reset, OUTPUT);
 
     // Perform reset
@@ -1184,13 +1162,10 @@ int sx127x::begin() {
   if (_busy != -1) { pinMode(_busy, INPUT); }
 
   if (!_preinit_done) {
-    Serial.write("should not be called from preInit\r\n");
     if (!preInit()) { return false; }
   }
-  Serial.write("trying to set frequency\r\n");
   sleep();
   setFrequency(_frequency);
-  Serial.write("done set frequency\r\n");
   // set base addresses
   writeRegister(REG_FIFO_TX_BASE_ADDR_7X, 0);
   writeRegister(REG_FIFO_RX_BASE_ADDR_7X, 0);
@@ -1206,7 +1181,6 @@ int sx127x::begin() {
   standby();
 
   _radio_online = true;
-  Serial.write("begin done\r\n");
   return 1;
 }
 
