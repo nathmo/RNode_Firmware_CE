@@ -20,7 +20,7 @@
 #if MCU_VARIANT == MCU_ESP32
 // Default stack size for loop function on Heltec32 V3 is not large enough,
 // must be increased to 11kb to prevent crashes.
-SET_LOOP_TASK_STACK_SIZE(64 * 1024);  // 15KB
+SET_LOOP_TASK_STACK_SIZE(11 * 1024);  // 11KB
 #endif
 
 
@@ -88,41 +88,6 @@ void setup() {
   memset(serialBuffer, 0, sizeof(serialBuffer));
   fifo_init(&serialFIFO, serialBuffer, CONFIG_UART_BUFFER_SIZE);
   Serial.begin(serial_baudrate);
-  Serial.print("Free heap : ");
-  Serial.println(ESP.getFreeHeap());// For debug
-/*
-
-
-  pinMode(7, OUTPUT);
-  digitalWrite(7, HIGH);
-  SPI.begin(4, 5, 6, 7);
-  uint8_t response;
-  digitalWrite(7, LOW);
-  Serial.write("A\r\n");
-  SPI.beginTransaction(SPISettings(8E6, MSBFIRST, SPI_MODE0)); // this crash the ESP32C3
-  Serial.write("B\r\n");
-  SPI.transfer(0x42 & 0x7f);
-  Serial.write("C\r\n");
-  response = SPI.transfer(0x00);
-  Serial.write("D\r\n");
-  Serial.write(response);
-  SPI.endTransaction();
-  Serial.write("E\r\n");
-  digitalWrite(7, HIGH);
-
-  digitalWrite(7, LOW);
-  Serial.write("A\r\n");
-  SPI.beginTransaction(SPISettings(8E6, MSBFIRST, SPI_MODE0)); // this crash the ESP32C3
-  Serial.write("B\r\n");
-  SPI.transfer(0x42 & 0x7f);
-  Serial.write("C\r\n");
-  response = SPI.transfer(0x00);
-  Serial.write("D\r\n");
-  Serial.write(response);
-  SPI.endTransaction();
-  Serial.write("E\r\n");
-  digitalWrite(7, HIGH);
-*/
 
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
@@ -182,7 +147,6 @@ void setup() {
               }
             interface_obj[i] = obj;
             interface_obj_sorted[i] = obj;
-            Serial.write("SX1262, no bueno\r\n");
             break;
           }
 
@@ -197,17 +161,14 @@ void setup() {
             obj = new sx127x(i, SPI, interface_pins[i][0],
             interface_pins[i][1], interface_pins[i][2], interface_pins[i][3],
             interface_pins[i][6], interface_pins[i][5], interface_pins[i][4]);
-                Serial.write("made one sx127x\r\n");
               }
               else {
             obj = new sx127x(i, interface_spi[i], interface_pins[i][0],
             interface_pins[i][1], interface_pins[i][2], interface_pins[i][3],
             interface_pins[i][6], interface_pins[i][5], interface_pins[i][4]);
-                Serial.write("made second sx127x\r\n");
               }
             interface_obj[i] = obj;
             interface_obj_sorted[i] = obj;
-            Serial.write("break sx127x\r\n");
             break;
           }
 
@@ -231,7 +192,6 @@ void setup() {
             }
             interface_obj[i] = obj;
             interface_obj_sorted[i] = obj;
-            Serial.write("break sx128x\r\n");
             break;
           }
           
@@ -243,8 +203,6 @@ void setup() {
     // Check installed transceiver chip(s) and probe boot parameters. If any of
     // the configured modems cannot be initialised, do not boot
     for (int i = 0; i < INTERFACE_COUNT; i++) {
-        Serial.write("loop\r\n");
-        Serial.write(i+48);
         switch (interfaces[i]) {
             case SX126X:
             case SX1262:
@@ -274,7 +232,6 @@ void setup() {
             // Quick reboot
 
             #if HAS_CONSOLE
-              Serial.write("this should not print\r\n");
               if (rtc_get_reset_reason(0) == POWERON_RESET) {
                 console_active = true;
               }
@@ -296,7 +253,6 @@ void setup() {
         }
     }
 
-  Serial.write("Done init Radio\r\n");
   #if HAS_DISPLAY
     #if HAS_EEPROM
     if (EEPROM.read(eeprom_addr(ADDR_CONF_DSET)) != CONF_OK_BYTE) {
@@ -333,7 +289,6 @@ void setup() {
     }
   // Validate board health, EEPROM and config  
   validate_status();
-      Serial.write("Done init Full\r\n");
 }
 
 void lora_receive(RadioInterface* radio) {
