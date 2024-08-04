@@ -1157,7 +1157,9 @@ uint8_t ISR_VECT sx127x::singleTransfer(uint8_t address, uint8_t value) {
 }
 
 int sx127x::begin() {
+  Serial.write("begin start\r\n");
   if (_reset != -1) {
+    Serial.write("begin if 1\r\n");
     pinMode(_reset, OUTPUT);
 
     // Perform reset
@@ -1166,17 +1168,17 @@ int sx127x::begin() {
     digitalWrite(_reset, HIGH);
     delay(10);
   }
-
+  
   if (_busy != -1) { pinMode(_busy, INPUT); }
 
   if (!_preinit_done) {
     Serial.write("should not be called from preInit\r\n");
     if (!preInit()) { return false; }
   }
-
+  Serial.write("trying to set frequency\r\n");
   sleep();
   setFrequency(_frequency);
-
+  Serial.write("done set frequency\r\n");
   // set base addresses
   writeRegister(REG_FIFO_TX_BASE_ADDR_7X, 0);
   writeRegister(REG_FIFO_RX_BASE_ADDR_7X, 0);
@@ -1192,7 +1194,7 @@ int sx127x::begin() {
   standby();
 
   _radio_online = true;
-
+  Serial.write("begin done\r\n");
   return 1;
 }
 
