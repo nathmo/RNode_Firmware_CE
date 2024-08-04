@@ -87,11 +87,11 @@ void setup() {
   // Initialise serial communication
   memset(serialBuffer, 0, sizeof(serialBuffer));
   fifo_init(&serialFIFO, serialBuffer, CONFIG_UART_BUFFER_SIZE);
-
-/*
   Serial.begin(serial_baudrate);
   Serial.print("Free heap : ");
   Serial.println(ESP.getFreeHeap());// For debug
+/*
+
 
   pinMode(7, OUTPUT);
   digitalWrite(7, HIGH);
