@@ -87,7 +87,8 @@ void setup() {
   // Initialise serial communication
   memset(serialBuffer, 0, sizeof(serialBuffer));
   fifo_init(&serialFIFO, serialBuffer, CONFIG_UART_BUFFER_SIZE);
-  
+
+/*
   Serial.begin(serial_baudrate);
   Serial.print("Free heap : ");
   Serial.println(ESP.getFreeHeap());// For debug
@@ -121,6 +122,7 @@ void setup() {
   SPI.endTransaction();
   Serial.write("E\r\n");
   digitalWrite(7, HIGH);
+*/
 
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
@@ -180,6 +182,7 @@ void setup() {
               }
             interface_obj[i] = obj;
             interface_obj_sorted[i] = obj;
+            Serial.write("SX1262, no bueno\r\n");
             break;
           }
 
@@ -194,14 +197,17 @@ void setup() {
             obj = new sx127x(i, SPI, interface_pins[i][0],
             interface_pins[i][1], interface_pins[i][2], interface_pins[i][3],
             interface_pins[i][6], interface_pins[i][5], interface_pins[i][4]);
+                Serial.write("made one sx127x\r\n");
               }
               else {
             obj = new sx127x(i, interface_spi[i], interface_pins[i][0],
             interface_pins[i][1], interface_pins[i][2], interface_pins[i][3],
             interface_pins[i][6], interface_pins[i][5], interface_pins[i][4]);
+                Serial.write("made second sx127x\r\n");
               }
             interface_obj[i] = obj;
             interface_obj_sorted[i] = obj;
+            Serial.write("break sx127x\r\n");
             break;
           }
 
@@ -225,6 +231,7 @@ void setup() {
             }
             interface_obj[i] = obj;
             interface_obj_sorted[i] = obj;
+            Serial.write("break sx128x\r\n");
             break;
           }
           
@@ -236,6 +243,8 @@ void setup() {
     // Check installed transceiver chip(s) and probe boot parameters. If any of
     // the configured modems cannot be initialised, do not boot
     for (int i = 0; i < INTERFACE_COUNT; i++) {
+        Serial.write("loop\r\n");
+        Serial.write(i+48);
         switch (interfaces[i]) {
             case SX126X:
             case SX1262:
