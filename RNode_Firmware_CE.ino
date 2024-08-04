@@ -87,7 +87,7 @@ void setup() {
   // Initialise serial communication
   memset(serialBuffer, 0, sizeof(serialBuffer));
   fifo_init(&serialFIFO, serialBuffer, CONFIG_UART_BUFFER_SIZE);
-
+  
   Serial.begin(serial_baudrate);
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
@@ -101,7 +101,7 @@ void setup() {
   #if HAS_INPUT
     input_init();
   #endif
-
+  
   #if HAS_NP == false
     pinMode(pin_led_rx, OUTPUT);
     pinMode(pin_led_tx, OUTPUT);
@@ -232,6 +232,7 @@ void setup() {
             // Quick reboot
 
             #if HAS_CONSOLE
+              Serial.write("this should not print\r\n");
               if (rtc_get_reset_reason(0) == POWERON_RESET) {
                 console_active = true;
               }
@@ -253,7 +254,7 @@ void setup() {
         }
     }
 
-
+  Serial.write("Done init Radio\r\n");
   #if HAS_DISPLAY
     #if HAS_EEPROM
     if (EEPROM.read(eeprom_addr(ADDR_CONF_DSET)) != CONF_OK_BYTE) {
@@ -290,6 +291,7 @@ void setup() {
     }
   // Validate board health, EEPROM and config  
   validate_status();
+      Serial.write("Done init Full\r\n");
 }
 
 void lora_receive(RadioInterface* radio) {
