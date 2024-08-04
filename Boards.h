@@ -790,6 +790,6 @@
     // INTERFACE_SPI is only required on NRF52 platforms, as the SPI pins are set in the class constructor and not by a setter method.
     // Even if custom SPI interfaces are not needed, the array must exist to prevent compilation errors.
     #define INTERFACE_SPI
-    SPIClass interface_spi[1] = {SPIClass()};
+    SPIClass interface_spi[1];
   #endif
 #endif
