@@ -109,7 +109,6 @@ void setup() {
   Serial.write("E\r\n");
   digitalWrite(7, HIGH);
 
-  uint8_t response;
   digitalWrite(7, LOW);
   Serial.write("A\r\n");
   SPI.beginTransaction(SPISettings(8E6, MSBFIRST, SPI_MODE0)); // this crash the ESP32C3
