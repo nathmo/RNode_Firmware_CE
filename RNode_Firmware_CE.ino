@@ -20,7 +20,7 @@
 #if MCU_VARIANT == MCU_ESP32
 // Default stack size for loop function on Heltec32 V3 is not large enough,
 // must be increased to 11kb to prevent crashes.
-SET_LOOP_TASK_STACK_SIZE(15 * 1024);  // 15KB
+SET_LOOP_TASK_STACK_SIZE(64 * 1024);  // 15KB
 #endif
 
 
