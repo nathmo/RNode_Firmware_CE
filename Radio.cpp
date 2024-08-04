@@ -1115,6 +1115,7 @@ bool sx127x::preInit() {
   pinMode(_ss, OUTPUT);
   digitalWrite(_ss, HIGH);
   // todo: check if this change causes issues on any platforms
+  Serial.write("pre init before begin \r\n");
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
     _spiModem.begin(_sclk, _miso, _mosi, _ss);
@@ -1123,7 +1124,7 @@ bool sx127x::preInit() {
   }
   #else
     _spiModem.begin();
-  
+  Serial.write("pre init after begin \r\n");
   #endif
   // Check modem version
   uint8_t version;
