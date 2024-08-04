@@ -1119,13 +1119,13 @@ bool sx127x::preInit() {
   #if MCU_VARIANT == MCU_ESP32
   if (_sclk != -1 && _miso != -1 && _mosi != -1 && _ss != -1) {
     Serial.write("_sclk\r\n");
-    Serial.write(str(_sclk));
+    Serial.write((_sclk)+48);
     Serial.write("_miso\r\n");
-    Serial.write(str(_miso));
+    Serial.write((_miso)+48);
     Serial.write("_mosi\r\n");
-    Serial.write(str(_mosi));
+    Serial.write((_mosi)+48);
     Serial.write("_ss\r\n");
-    Serial.write(str(_ss));
+    Serial.write((_ss)+48);
     
     Serial.write("_spiModem.begin(_sclk, _miso, _mosi, _ss) \r\n");
     _spiModem.begin(_sclk, _miso, _mosi, _ss);
