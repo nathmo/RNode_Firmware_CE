@@ -1125,30 +1125,32 @@ bool sx127x::preInit() {
     _spiModem.begin();
   
   #endif
-  Serial.write("SPI modem began.\r\n");
   // Check modem version
   uint8_t version;
   long start = millis();
   while (((millis() - start) < 500) && (millis() >= start)) {
-      Serial.write("loop in.\r\n");
-      version = 0x12 ; //readRegister(REG_VERSION_7X);
+      version = readRegister(REG_VERSION_7X);
       if (version == 0x12) { break; }
       delay(100);
-      Serial.write("loop out.\r\n");
   }
   if (version != 0x12) { return false; }
-  Serial.write("preinit done.\r\n");
   _preinit_done = true;
+  Serial.write("pre initDone\r\n");
   return true;
 }
 
 uint8_t ISR_VECT sx127x::singleTransfer(uint8_t address, uint8_t value) {
   uint8_t response;
   digitalWrite(_ss, LOW);
+  Serial.write("A\r\n");
   _spiModem.beginTransaction(_spiSettings); // this crash the ESP32C3
+  Serial.write("B\r\n");
   _spiModem.transfer(address);
+  Serial.write("C\r\n");
   response = _spiModem.transfer(value);
+  Serial.write("D\r\n");
   _spiModem.endTransaction();
+  Serial.write("E\r\n");
   digitalWrite(_ss, HIGH);
   return response;
 }
@@ -1167,6 +1169,7 @@ int sx127x::begin() {
   if (_busy != -1) { pinMode(_busy, INPUT); }
 
   if (!_preinit_done) {
+    Serial.write("should not be called from preInit\r\n");
     if (!preInit()) { return false; }
   }
 
@@ -1390,16 +1393,13 @@ void sx127x::setFrequency(uint32_t frequency) {
 }
 
 uint32_t sx127x::getFrequency() {
-  Serial.write("getFrequency start\r\n");
   uint8_t msb = readRegister(REG_FRF_MSB_7X);
-  Serial.write("getFrequency register 1 success\r\n");
   uint8_t mid = readRegister(REG_FRF_MID_7X);
   uint8_t lsb = readRegister(REG_FRF_LSB_7X);
 
   uint32_t frf = ((uint32_t)msb << 16) | ((uint32_t)mid << 8) | (uint32_t)lsb;
   uint64_t frm = (uint64_t)frf*32000000;
   uint32_t frequency = (frm >> 19);
-  Serial.write("getFrequency done\r\n");
   return frequency;
 }
 
