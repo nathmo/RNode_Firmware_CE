@@ -92,6 +92,23 @@ void setup() {
   Serial.print("Free heap : ");
   Serial.println(ESP.getFreeHeap());// For debug
 
+  pinMode(_ss, OUTPUT);
+  digitalWrite(_ss, HIGH);
+  SPI.begin(4, 5, 6, 7);
+  uint8_t response;
+  digitalWrite(_ss, LOW);
+  Serial.write("A\r\n");
+  SPI.beginTransaction(_spiSettings); // this crash the ESP32C3
+  Serial.write("B\r\n");
+  SPI.transfer(REG_VERSION_7X & 0x7f);
+  Serial.write("C\r\n");
+  response = _spiModem.transfer(0x00);
+  Serial.write("D\r\n");
+  SPI.endTransaction();
+  Serial.write("E\r\n");
+  digitalWrite(_ss, HIGH);
+  return response;
+
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
   // the full firmware. In the case of the RAK4631, the line below will wait
