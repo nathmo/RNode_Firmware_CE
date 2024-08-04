@@ -60,6 +60,7 @@ uint8_t *packet_queue[INTERFACE_COUNT];
 
 void setup() {
   #if MCU_VARIANT == MCU_ESP32
+    delay(5000);// delete me, only used for debug to have time to lauch serial before the board boot.
     boot_seq();
     EEPROM.begin(EEPROM_SIZE);
     Serial.setRxBufferSize(CONFIG_UART_BUFFER_SIZE);
