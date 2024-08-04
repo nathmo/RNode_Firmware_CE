@@ -92,11 +92,11 @@ void setup() {
   Serial.print("Free heap : ");
   Serial.println(ESP.getFreeHeap());// For debug
 
-  pinMode(_ss, OUTPUT);
-  digitalWrite(_ss, HIGH);
+  pinMode(7, OUTPUT);
+  digitalWrite(7, HIGH);
   SPI.begin(4, 5, 6, 7);
   uint8_t response;
-  digitalWrite(_ss, LOW);
+  digitalWrite(7, LOW);
   Serial.write("A\r\n");
   SPI.beginTransaction(SPISettings(8E6, MSBFIRST, SPI_MODE0)); // this crash the ESP32C3
   Serial.write("B\r\n");
@@ -106,7 +106,7 @@ void setup() {
   Serial.write("D\r\n");
   SPI.endTransaction();
   Serial.write("E\r\n");
-  digitalWrite(_ss, HIGH);
+  digitalWrite(7, HIGH);
 
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
