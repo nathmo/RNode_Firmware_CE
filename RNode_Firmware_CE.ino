@@ -98,16 +98,15 @@ void setup() {
   uint8_t response;
   digitalWrite(_ss, LOW);
   Serial.write("A\r\n");
-  SPI.beginTransaction(_spiSettings); // this crash the ESP32C3
+  SPI.beginTransaction(SPISettings(8E6, MSBFIRST, SPI_MODE0)); // this crash the ESP32C3
   Serial.write("B\r\n");
-  SPI.transfer(REG_VERSION_7X & 0x7f);
+  SPI.transfer(0x42 & 0x7f);
   Serial.write("C\r\n");
-  response = _spiModem.transfer(0x00);
+  response = SPI.transfer(0x00);
   Serial.write("D\r\n");
   SPI.endTransaction();
   Serial.write("E\r\n");
   digitalWrite(_ss, HIGH);
-  return response;
 
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
