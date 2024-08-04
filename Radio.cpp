@@ -1081,7 +1081,7 @@ void sx126x::clearIRQStatus() {
 
 #define SYNC_WORD_7X                  0x12
 
-sx127x::sx127x(uint8_t index, SPIClass spi, int ss, int sclk, int mosi, int miso, int reset, int dio0, int busy) :
+sx127x::sx127x(uint8_t index, SPIClass& spi, int ss, int sclk, int mosi, int miso, int reset, int dio0, int busy) :
   RadioInterface(index),
     _spiSettings(8E6, MSBFIRST, SPI_MODE0),
     _spiModem(spi),
