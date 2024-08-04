@@ -1125,17 +1125,19 @@ bool sx127x::preInit() {
     _spiModem.begin();
   
   #endif
-
+  Serial.write("SPI modem began.\r\n");
   // Check modem version
   uint8_t version;
   long start = millis();
   while (((millis() - start) < 500) && (millis() >= start)) {
+      Serial.write("loop in.\r\n");
       version = 0x12 ; //readRegister(REG_VERSION_7X);
       if (version == 0x12) { break; }
       delay(100);
+      Serial.write("loop out.\r\n");
   }
   if (version != 0x12) { return false; }
-
+  Serial.write("preinit done.\r\n");
   _preinit_done = true;
   return true;
 }
