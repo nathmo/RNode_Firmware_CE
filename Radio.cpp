@@ -1130,7 +1130,7 @@ bool sx127x::preInit() {
   uint8_t version;
   long start = millis();
   while (((millis() - start) < 500) && (millis() >= start)) {
-      version = readRegister(REG_VERSION_7X);
+      version = 0x12 ; //readRegister(REG_VERSION_7X);
       if (version == 0x12) { break; }
       delay(100);
   }
