@@ -1,6 +1,7 @@
 # Building
 ## Prerequisites
-The build system of this repository is based on Make. The `Makefile` is in the base of the repository. the makefile use the arduino-cli to compile the sketch.
+The build system of this repository is based on GNU Make. The `Makefile` is in the base of the repository. Please ensure you have `arduino-cli`, `python3` and `make` installed before proceeding.
+
 Firstly, figure out which MCU platform your supported board is based on. The table below can help you.
 
 | Board name | Link | Transceiver | MCU | Description | 

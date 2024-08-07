@@ -21,7 +21,7 @@ clean:
 	-rm -r ./build
 	-rm ./Release/rnode_firmware*
 
-prep: prep-avr prep-esp32 prep-samd
+prep: prep-esp32 prep-samd
 
 prep-avr:
 	arduino-cli core update-index --config-file arduino-cli.yaml
@@ -33,6 +33,7 @@ prep-esp32:
 	arduino-cli lib install "Adafruit SSD1306"
 	arduino-cli lib install "XPowersLib"
 	arduino-cli lib install "Crypto"
+	pip install pyserial rns --upgrade --user --break-system-packages # This looks scary, but it's actually just telling pip to install packages as a user instead of trying to install them systemwide, which bypasses the "externally managed environment" error.
 
 prep-samd:
 	arduino-cli core update-index --config-file arduino-cli.yaml
@@ -43,7 +44,8 @@ prep-nrf:
 	arduino-cli lib install "Crypto"
 	arduino-cli lib install "Adafruit GFX Library"
 	arduino-cli lib install "GxEPD2"
-	pip install adafruit-nrfutil --upgrade
+	pip install pyserial rns --upgrade --user --break-system-packages
+	pip install adafruit-nrfutil --upgrade --user --break-system-packages # This looks scary, but it's actually just telling pip to install packages as a user instead of trying to install them systemwide, which bypasses the "externally managed environment" error.
 
 console-site:
 	make -C Console clean site
@@ -56,12 +58,6 @@ spiffs-image:
 upload-spiffs:
 	@echo Deploying SPIFFS image...
 	python ./Release/esptool/esptool.py --chip esp32 --port /dev/ttyACM0 --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size 4MB 0x210000 ./Release/console_image.bin
-
-firmware:
-	arduino-cli compile --fqbn unsignedio:avr:rnode
-
-firmware-mega2560:
-	arduino-cli compile --fqbn arduino:avr:mega
 
 firmware-tbeam:
 	arduino-cli compile --fqbn esp32:esp32:t-beam -e --build-property "build.partitions=no_ota" --build-property "upload.maximum_size=2097152" --build-property "compiler.cpp.extra_flags=\"-DBOARD_MODEL=0x33\""
@@ -125,12 +121,6 @@ firmware-rak4631_sx1280:
 
 firmware-freenode:
 	arduino-cli compile --fqbn rakwireless:nrf52:WisCoreRAK4631Board -e --build-property "build.partitions=no_ota" --build-property "upload.maximum_size=2097152" --build-property "compiler.cpp.extra_flags=\"-DBOARD_MODEL=0x51\" \"-DBOARD_VARIANT=0x21\""
-
-upload:
-	arduino-cli upload -p /dev/ttyUSB0 --fqbn unsignedio:avr:rnode
-
-upload-mega2560:
-	arduino-cli upload -p /dev/ttyACM0 --fqbn arduino:avr:mega
 
 upload-tbeam:
 	arduino-cli upload -p /dev/ttyACM0 --fqbn esp32:esp32:t-beam
