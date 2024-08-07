@@ -234,13 +234,11 @@ void setup() {
         if (selected_radio->preInit()) {
           modems_installed = true;
           uint32_t lfr = selected_radio->getFrequency();
-          Serial.write("getFrequency() : "); //debug statement !
-          Serial.write(lfr);    //debug statement !
-          Serial.write("\r\n"); //debug statement !
+          Serial.print("getFrequency() : "); //debug statement !
+          Serial.printf(lfr);    //debug statement !
 
-          Serial.write("M_FRQ_S : "); //debug statement !
-          Serial.write(M_FRQ_S);    //debug statement !
-          Serial.write("\r\n"); //debug statement !
+          Serial.print("M_FRQ_S : "); //debug statement !
+          Serial.printf(M_FRQ_S);    //debug statement !
 
 
           if (lfr == 0) {
@@ -256,9 +254,9 @@ void setup() {
             // Unknown boot
           }
           selected_radio->setFrequency(M_FRQ_S);
-          Serial.write("getFrequency() POST : ");          //debug statement !
-          Serial.write(selected_radio->getFrequency());    //debug statement !
-          Serial.write("\r\n");                            //debug statement !
+          Serial.print("getFrequency() POST : ");          //debug statement !
+          Serial.printf(selected_radio->getFrequency());    //debug statement !
+
         } else {
           modems_installed = false;
         }
