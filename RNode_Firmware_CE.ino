@@ -235,10 +235,10 @@ void setup() {
           modems_installed = true;
           uint32_t lfr = selected_radio->getFrequency();
           Serial.print("getFrequency() : "); //debug statement !
-          Serial.printf(lfr);    //debug statement !
+          Serial.printf("%u", lfr);    //debug statement !
 
           Serial.print("M_FRQ_S : "); //debug statement !
-          Serial.printf(M_FRQ_S);    //debug statement !
+          Serial.printf("%u", M_FRQ_S);    //debug statement !
 
 
           if (lfr == 0) {
@@ -255,7 +255,7 @@ void setup() {
           }
           selected_radio->setFrequency(M_FRQ_S);
           Serial.print("getFrequency() POST : ");          //debug statement !
-          Serial.printf(selected_radio->getFrequency());    //debug statement !
+          Serial.printf("%u", selected_radio->getFrequency());    //debug statement !
 
         } else {
           modems_installed = false;
