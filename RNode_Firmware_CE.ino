@@ -101,7 +101,7 @@ void setup() {
   fifo_init(&serialFIFO, serialBuffer, CONFIG_UART_BUFFER_SIZE);
 
   Serial.begin(serial_baudrate);
-
+  delay(3000);
   #if BOARD_MODEL != BOARD_RAK4631 && BOARD_MODEL != BOARD_T3S3
   // Some boards need to wait until the hardware UART is set up before booting
   // the full firmware. In the case of the RAK4631, the line below will wait
