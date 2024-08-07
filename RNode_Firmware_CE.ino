@@ -253,8 +253,8 @@ void setup() {
           } else {
             // Unknown boot
           }
-          selected_radio->setFrequency(M_FRQ_S);
-          Serial.print("getFrequency() POST : ");          //debug statement !
+          selected_radio->setFrequency(433000000);
+          Serial.print("getFrequency() 433000000 : ");          //debug statement !
           Serial.printf("%u", selected_radio->getFrequency());    //debug statement !
 
         } else {
